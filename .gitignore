@@ -31,3 +31,41 @@ build/
 
 ### VS Code ###
 .vscode/
+
+# ============================================
+# ARCHIVOS SENSIBLES - NUNCA SUBIR A GIT
+# ============================================
+# Archivos de configuración con credenciales (el template SÍ se sube)
+**/application.properties
+**/application-local.properties
+**/application-dev.properties
+**/application-staging.properties
+**/application-production.properties
+!**/application.properties.template
+
+# ============================================
+# LOGS
+# ============================================
+*.log
+logs/
+app.log
+app-error.log
+app-output.log
+backend.log
+backend-error.log
+
+# ============================================
+# ARCHIVOS DE DEBEZIUM/CDC
+# ============================================
+cdc-offsets.dat
+cdc-offsets.dat.*
+*.dat
+
+# ============================================
+# ARCHIVOS DEL SISTEMA
+# ============================================
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~

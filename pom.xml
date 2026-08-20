@@ -6,121 +6,54 @@
 		<groupId>org.springframework.boot</groupId>
 		<artifactId>spring-boot-starter-parent</artifactId>
 		<version>4.1.0</version>
-		<relativePath/> <!-- lookup parent from repository -->
+		<relativePath/>
 	</parent>
 	<groupId>com.sgcc</groupId>
-	<artifactId>gestion</artifactId>
+	<artifactId>seguimientocuentas</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
-	<name/>
-	<description/>
-	<url/>
-	<licenses>
-		<license/>
-	</licenses>
-	<developers>
-		<developer/>
-	</developers>
-	<scm>
-		<connection/>
-		<developerConnection/>
-		<tag/>
-		<url/>
-	</scm>
+	<packaging>pom</packaging>
+	<name>seguimientocuentas</name>
+	<description>Sistema de Seguimiento de Cuentas - Arquitectura Hexagonal y Microservicios</description>
+
+	<modules>
+		<module>seguimientocuentas-common</module>
+		<module>seguimientocuentas-contratos</module>
+		<module>seguimientocuentas-cdc</module>
+		<module>seguimientocuentas-app</module>
+	</modules>
+
 	<properties>
 		<java.version>17</java.version>
 		<kafka.version>3.9.0</kafka.version>
+		<debezium.version>2.7.0.Final</debezium.version>
 	</properties>
-	<dependencies>
-		<dependency>
-			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-data-jpa</artifactId>
-		</dependency>
-		<dependency>
-			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-web</artifactId>
-		</dependency>
-		<dependency>
-			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-security</artifactId>
-		</dependency>
-		<dependency>
-			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-json</artifactId>
-		</dependency>
-
-		<dependency>
-			<groupId>org.postgresql</groupId>
-			<artifactId>postgresql</artifactId>
-			<scope>runtime</scope>
-		</dependency>
-
-		<!-- Kafka 3.9 (compatible con Debezium 2.7) -->
-		<dependency>
-			<groupId>org.apache.kafka</groupId>
-			<artifactId>kafka-clients</artifactId>
-			<version>3.9.0</version>
-		</dependency>
-		<dependency>
-			<groupId>org.apache.kafka</groupId>
-			<artifactId>connect-api</artifactId>
-			<version>3.9.0</version>
-		</dependency>
-
-		<!-- Debezium CDC -->
-		<dependency>
-			<groupId>io.debezium</groupId>
-			<artifactId>debezium-core</artifactId>
-			<version>2.7.0.Final</version>
-		</dependency>
-		<dependency>
-			<groupId>io.debezium</groupId>
-			<artifactId>debezium-connector-postgres</artifactId>
-			<version>2.7.0.Final</version>
-		</dependency>
-		<dependency>
-			<groupId>io.debezium</groupId>
-			<artifactId>debezium-embedded</artifactId>
-			<version>2.7.0.Final</version>
-			<exclusions>
-				<exclusion>
-					<groupId>org.apache.kafka</groupId>
-					<artifactId>kafka-clients</artifactId>
-				</exclusion>
-			</exclusions>
-		</dependency>
-
-		<dependency>
-			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-data-jpa-test</artifactId>
-			<scope>test</scope>
-		</dependency>
-		<dependency>
-			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-security-test</artifactId>
-			<scope>test</scope>
-		</dependency>
-	</dependencies>
-
-	<build>
-		<plugins>
-			<plugin>
-				<groupId>org.springframework.boot</groupId>
-				<artifactId>spring-boot-maven-plugin</artifactId>
-			</plugin>
-		</plugins>
-	</build>
 
 	<dependencyManagement>
 		<dependencies>
 			<dependency>
+				<groupId>com.sgcc</groupId>
+				<artifactId>seguimientocuentas-common</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>com.sgcc</groupId>
+				<artifactId>seguimientocuentas-contratos</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>com.sgcc</groupId>
+				<artifactId>seguimientocuentas-cdc</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
 				<groupId>org.apache.kafka</groupId>
 				<artifactId>connect-runtime</artifactId>
-				<version>3.9.0</version>
+				<version>${kafka.version}</version>
 			</dependency>
 			<dependency>
 				<groupId>org.apache.kafka</groupId>
 				<artifactId>connect-json</artifactId>
-				<version>3.9.0</version>
+				<version>${kafka.version}</version>
 			</dependency>
 		</dependencies>
 	</dependencyManagement>
