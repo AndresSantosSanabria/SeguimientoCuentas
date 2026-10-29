@@ -1,0 +1,22 @@
+/* ============================================
+   HOJA DE ESTILOS · CSS puro, sin framework.
+   El orden de importación ES el orden de cascada:
+   tokens → reset → primitivas → tonos → layout → componentes → páginas.
+   Nunca se usa !important ni @layer: una regla que va después gana
+   cuando ambas tienen la misma especificidad.
+
+   Convenciones de nombre:
+   · kebab-case en español, un rol por clase (.card, .table-th, .enlace-volver).
+   · variantes como descriptores de rol, no de tamaño (.btn-ghost, .kpi-cuadricula-seis).
+   · el estado se declara en el JSX con atributos ([data-tone], [aria-pressed])
+     y aquí solo se lee; ninguna cadena de clases se arma en JavaScript.
+   · los iconos se dimensionan por contenedor (> svg), no con utilidades.
+   ============================================ */
+
+@import url(./01-tokens.css);
+@import url(./02-base.css);
+@import url(./03-primitives.css);
+@import url(./04-tones.css);
+@import url(./05-layout.css);
+@import url(./06-components.css);
+@import url(./07-pages.css);

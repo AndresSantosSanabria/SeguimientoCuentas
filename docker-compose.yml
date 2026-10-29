@@ -1,0 +1,58 @@
+name: ge-cor
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: deploy/backend.Dockerfile
+    image: ge-cor-backend:latest
+    container_name: ge-cor-backend
+    restart: unless-stopped
+    environment:
+      SUPERVISA_DB_URL: ${SUPERVISA_DB_URL:-jdbc:postgresql://host.docker.internal:5432/supervisa}
+      SUPERVISA_DB_USER: ${SUPERVISA_DB_USER:-postgres}
+      SUPERVISA_DB_PASSWORD: ${SUPERVISA_DB_PASSWORD:-postgres}
+      SUPERVISA_CDC_HOST: ${SUPERVISA_CDC_HOST:-host.docker.internal}
+      SUPERVISA_CDC_PORT: ${SUPERVISA_CDC_PORT:-5432}
+      SUPERVISA_CDC_USER: ${SUPERVISA_CDC_USER:-postgres}
+      SUPERVISA_CDC_PASSWORD: ${SUPERVISA_CDC_PASSWORD:-postgres}
+      SUPERVISA_CDC_DB: ${SUPERVISA_CDC_DB:-supervisa}
+      SUPERVISA_CDC_ENABLED: ${SUPERVISA_CDC_ENABLED:-true}
+      SUPERVISA_CDC_SNAPSHOT_MODE: ${SUPERVISA_CDC_SNAPSHOT_MODE:-never}
+      SUPERVISA_CDC_OFFSETS_FILE: /app/data/cdc-offsets.dat
+      TZ: America/Bogota
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - cdc-data:/app/data
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsSI http://127.0.0.1:8080/api/contratos >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: deploy/frontend.Dockerfile
+    image: ge-cor-frontend:latest
+    container_name: ge-cor-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_started
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  cdc-data:
+    name: supervisa-cdc-data

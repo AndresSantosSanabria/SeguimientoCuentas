@@ -1,0 +1,196 @@
+/* ============================================
+   TOKENS · única fuente de color, tipo y sombra
+   Los valores de la paleta son el sRGB que el navegador
+   rasteriza hoy para el oklch() de Tailwind v4 (medido en vivo),
+   así que cambiarlos mueve píxeles en pantalla.
+   ============================================ */
+
+:root {
+  /* ---- marca GE-COR ---- */
+  --brand-50: #eef7ff;
+  --brand-100: #d9edff;
+  --brand-200: #b6dcff;
+  --brand-300: #7cc2ff;
+  --brand-400: #3aa4fb;
+  --brand-500: #1f8ae8;
+  --brand-600: #146fc4;
+  --brand-700: #11599e;
+  --brand-800: #123f74;
+  --brand-900: #0d2b52;
+
+  /* ---- neutros ---- */
+  --slate-50: #f8fafc;
+  --slate-100: #f1f5f9;
+  --slate-200: #e2e8f0;
+  --slate-300: #cad5e2;
+  --slate-400: #90a1b9;
+  --slate-500: #62748e;
+  --slate-600: #45556c;
+  --slate-700: #314158;
+  --slate-800: #1d293d;
+  --slate-900: #0f172b;
+  --slate-950: #020618;
+
+  /* ---- semánticos ---- */
+  --emerald-50: #ecfdf5;
+  --emerald-100: #d0fae5;
+  --emerald-200: #a4f4cf;
+  --emerald-300: #5ee9b5;
+  --emerald-400: #00d492;
+  --emerald-500: #00bc7d;
+  --emerald-600: #009966;
+  --emerald-700: #007a55;
+
+  --amber-50: #fffbeb;
+  --amber-100: #fef3c6;
+  --amber-200: #fee685;
+  --amber-300: #ffd230;
+  --amber-500: #fe9a00;
+  --amber-600: #e17100;
+  --amber-700: #bb4d00;
+
+  --rose-50: #fff1f2;
+  --rose-100: #ffe4e6;
+  --rose-200: #ffccd3;
+  --rose-300: #ffa1ad;
+  --rose-400: #ff637e;
+  --rose-500: #ff2056;
+  --rose-600: #ec003f;
+  --rose-700: #c70036;
+  --rose-900: #8b0836;
+
+  --sky-50: #f0f9ff;
+  --sky-100: #dff2fe;
+  --sky-200: #b8e6fe;
+  --sky-500: #00a6f4;
+  --sky-600: #0084d1;
+  --sky-700: #0069a8;
+
+  --violet-50: #f5f3ff;
+  --violet-700: #7008e7;
+
+  /* ---- translúcidos: solo los que realmente se usan ---- */
+  --white-a10: rgba(255, 255, 255, 0.1);
+  --white-a15: rgba(255, 255, 255, 0.15);
+  --white-a20: rgba(255, 255, 255, 0.2);
+  --white-a25: rgba(255, 255, 255, 0.25);
+  --white-a30: rgba(255, 255, 255, 0.3);
+  --white-a40: rgba(255, 255, 255, 0.4);
+  --white-a50: rgba(255, 255, 255, 0.5);
+  --white-a60: rgba(255, 255, 255, 0.6);
+  --white-a70: rgba(255, 255, 255, 0.7);
+  --white-a75: rgba(255, 255, 255, 0.75);
+  --white-a80: rgba(255, 255, 255, 0.8);
+  --white-a95: rgba(255, 255, 255, 0.95);
+
+  --slate-50-a60: rgba(248, 250, 252, 0.6);
+  --slate-50-a70: rgba(248, 250, 252, 0.7);
+  --slate-50-a80: rgba(248, 250, 252, 0.8);
+  --slate-200-a80: rgba(226, 232, 240, 0.8);
+  --slate-300-a40: rgba(202, 213, 226, 0.4);
+  --slate-950-a50: rgba(2, 6, 24, 0.5);
+
+  --emerald-50-a60: rgba(236, 253, 245, 0.6);
+  --emerald-50-a70: rgba(236, 253, 245, 0.7);
+  --emerald-200-a30: rgba(164, 244, 207, 0.3);
+  --emerald-300-a70: rgba(94, 233, 181, 0.7);
+  --emerald-400-a10: rgba(0, 212, 146, 0.1);
+
+  --amber-50-a60: rgba(255, 251, 235, 0.6);
+  --amber-200-a40: rgba(254, 230, 133, 0.4);
+  --amber-300-a10: rgba(255, 210, 48, 0.1);
+
+  --rose-50-a60: rgba(255, 241, 242, 0.6);
+  --rose-50-a70: rgba(255, 241, 242, 0.7);
+  --rose-200-a40: rgba(255, 204, 211, 0.4);
+  --rose-400-a15: rgba(255, 99, 126, 0.15);
+  --rose-700-a80: rgba(199, 0, 54, 0.8);
+
+  --sky-50-a60: rgba(240, 249, 255, 0.6);
+  --sky-100-a60: rgba(223, 242, 254, 0.6);
+  --sky-100-a70: rgba(223, 242, 254, 0.7);
+
+  --brand-50-a70: rgba(238, 247, 255, 0.7);
+  --brand-500-a10: rgba(31, 138, 232, 0.1);
+  --brand-500-a25: rgba(31, 138, 232, 0.25);
+  --brand-900-a20: rgba(13, 43, 82, 0.2);
+  --brand-900-a25: rgba(13, 43, 82, 0.25);
+
+  /* ---- tipografía ---- */
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --size-xs: 0.75rem;
+  --size-xs-lh: 1rem;
+  --size-sm: 0.875rem;
+  --size-sm-lh: 1.25rem;
+  --size-base: 1rem;
+  --size-lg: 1.125rem;
+  --size-lg-lh: 1.75rem;
+  --size-2xl: 1.5rem;
+  --size-2xl-lh: 2rem;
+  --size-3xl: 1.875rem;
+  --size-3xl-lh: 2.25rem;
+  --lh-normal: 1.5;
+  --lh-snug: 1.375;
+  --lh-relaxed: 1.625;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+
+  --tracking-tight: -0.025em;
+  --tracking-wide: 0.025em;
+  --tracking-wider: 0.05em;
+  --tracking-marca: 0.12em;
+  --tracking-submarca: 0.16em;
+  --tracking-eyebrow: 0.18em;
+
+  /* ---- geometría ---- */
+  --radius: 0.25rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+  --radius-2xl: 1rem;
+  --radius-full: 9999px;
+
+  /* ---- color de fondo y bordes del shell ---- */
+  --app-bg: var(--slate-100);
+  --surface: #ffffff;
+
+  /* ---- sombras ---- */
+  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  --shadow-xl-tinted: 0 20px 25px -5px rgba(15, 23, 43, 0.1),
+    0 8px 10px -6px rgba(15, 23, 43, 0.1);
+  --shadow-2xl-tinted: 0 25px 50px -12px rgba(13, 43, 82, 0.25);
+  --shadow-sm-tinted: 0 1px 3px 0 rgba(13, 43, 82, 0.2),
+    0 1px 2px -1px rgba(13, 43, 82, 0.2);
+  --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04), 0 10px 30px -18px rgba(15, 23, 42, 0.25);
+  --shadow-topbar: 0 14px 40px -20px rgba(4, 16, 48, 0.9);
+  --shadow-link-activo: 0 8px 24px -12px rgba(2, 6, 23, 0.9);
+  --inset-blanco-35: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  --inset-blanco-20: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  --inset-blanco-18: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+
+  /* ---- gradientes de marca ---- */
+  --brand-gradient: linear-gradient(115deg, #38c6e8 0%, #1e7fd8 48%, #123a86 100%);
+  --brand-gradient-soft: linear-gradient(135deg, #f2f9ff 0%, #e3f2fe 50%, #eef6ff 100%);
+  --topbar-brillo: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.14) 0%,
+    rgba(255, 255, 255, 0) 45%,
+    rgba(2, 8, 30, 0.1) 100%
+  );
+  --kpi-icono-brand: linear-gradient(to bottom right, var(--sky-100), var(--brand-50), var(--brand-100));
+
+  /* ---- desenfoque y transición ---- */
+  --blur-8: blur(8px);
+  --easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --durable: 150ms;
+  --transicion: color var(--durable) var(--easing),
+    background-color var(--durable) var(--easing),
+    border-color var(--durable) var(--easing),
+    box-shadow var(--durable) var(--easing),
+    transform var(--durable) var(--easing),
+    filter var(--durable) var(--easing);
+
+  /* ---- puntos de quiebre (documentados: no pueden ser variables) ----
+     640 · 768 · 1024 · 1280, siempre min-width, en orden ascendente. */
+}

@@ -1,0 +1,665 @@
+/* ============================================
+   PÁGINAS · ritmos verticales, cuadrículas y roles de tabla propios de cada vista.
+   Va al final de la cadena de @import: gana ante primitivas y componentes
+   cuando una página necesita apartarse del patrón general.
+   ============================================ */
+
+/* ---- ritmo vertical de una página ---- */
+.pila-pagina > * + * {
+  margin-block-start: 1.25rem;
+}
+
+.pila-pagina-amplia > * + * {
+  margin-block-start: 1.5rem;
+}
+
+.pila-bloque > * + * {
+  margin-block-start: 0.75rem;
+}
+
+.pila-datos > * + * {
+  margin-block-start: 1rem;
+}
+
+/* ---- cuadrícula de KPIs ---- */
+.kpi-cuadricula {
+  display: grid;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+@media (min-width: 640px) {
+  .kpi-cuadricula {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1280px) {
+  .kpi-cuadricula-cuatro {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .kpi-cuadricula-seis {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+/* ---- cuadrícula de 12 columnas de los tableros ---- */
+.cuadricula-panel {
+  display: grid;
+  gap: 1.25rem;
+}
+
+@media (min-width: 1280px) {
+  .cuadricula-panel {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+  }
+
+  .celda-col-corta {
+    grid-column: span 4 / span 4;
+  }
+
+  .celda-col-media {
+    grid-column: span 5 / span 5;
+  }
+
+  .celda-col-larga {
+    grid-column: span 7 / span 7;
+  }
+
+  .celda-col-grande {
+    grid-column: span 8 / span 8;
+  }
+
+  .celda-col-completa {
+    grid-column: span 12 / span 12;
+  }
+}
+
+/* ---- tarjeta que estira su última sección ---- */
+.tarjeta-columna {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---- barra de filtros del explorador ---- */
+.filtros-grid {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+}
+
+@media (min-width: 640px) {
+  .filtros-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1280px) {
+  .filtros-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.campo-filtro {
+  display: block;
+}
+
+.filtros-barra {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  border-block-start: 1px solid var(--slate-100);
+  padding: 0.625rem 1rem;
+}
+
+.filtros-resumen {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: var(--size-xs);
+  line-height: var(--size-xs-lh);
+  color: var(--slate-500);
+}
+
+.filtros-resumen > svg {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+.filtros-resumen-cifra {
+  font-weight: var(--weight-semibold);
+  color: var(--slate-700);
+}
+
+.limpiar-filtros {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  border-radius: var(--radius-lg);
+  padding: 0.25rem 0.5rem;
+  font-size: var(--size-xs);
+  line-height: var(--size-xs-lh);
+  font-weight: var(--weight-medium);
+  color: var(--slate-500);
+  transition: var(--transicion);
+}
+
+.limpiar-filtros > svg {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+.limpiar-filtros:hover {
+  background-color: var(--slate-100);
+  color: var(--slate-700);
+}
+
+.limpiar-filtros:disabled {
+  opacity: 0.4;
+}
+
+/* ---- buscador ---- */
+.busqueda-listado {
+  position: relative;
+  display: block;
+  width: 100%;
+}
+
+.busqueda-campo {
+  position: relative;
+  display: block;
+}
+
+@media (min-width: 640px) {
+  .busqueda-listado {
+    width: 20rem;
+  }
+}
+
+/* ---- contador dentro de un botón ---- */
+.btn-contador {
+  border-radius: var(--radius-full);
+  background-color: var(--white-a20);
+  padding: 0.125rem 0.5rem;
+  font-size: 11px;
+}
+
+/* ---- encabezado de la tarjeta de listado ---- */
+.listado-cabecera {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-block-end: 1px solid var(--slate-100);
+  padding: 1rem 1.25rem;
+}
+
+/* ---- celdas de las tablas de listado ---- */
+.celda-titulo {
+  font-weight: var(--weight-medium);
+}
+
+.celda-contratista {
+  max-width: 16rem;
+}
+
+.celda-amplia {
+  max-width: 14rem;
+}
+
+.celda-estado {
+  max-width: 12rem;
+}
+
+.celda-cifra {
+  text-align: center;
+  font-size: var(--size-xs);
+  line-height: var(--size-xs-lh);
+  font-variant-numeric: tabular-nums;
+  color: var(--slate-600);
+}
+
+.celda-fecha {
+  white-space: nowrap;
+  font-size: var(--size-xs);
+  line-height: var(--size-xs-lh);
+  color: var(--slate-600);
+}
+
+.celda-momento {
+  white-space: nowrap;
+  text-align: right;
+  font-size: var(--size-xs);
+  line-height: var(--size-xs-lh);
+  color: var(--slate-500);
+}
+
+.celda-mixta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.celda-flecha {
+  color: var(--slate-300);
+}
+
+.celda-flecha > svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.cifra-parcial {
+  color: var(--slate-400);
+}
+
+.marca-mora {
+  margin-inline-start: 0.375rem;
+  border-radius: var(--radius-full);
+  background-color: var(--rose-50);
+  padding: 0.125rem 0.375rem;
+  font-size: 10px;
+  font-weight: var(--weight-semibold);
+  color: var(--rose-600);
+}
+
+/* ---- confirmación del botón copiar enlace ---- */
+.check-copiado {
+  color: var(--emerald-600);
+}
+
+/* ---- enlace para volver al listado ---- */
+.enlace-volver {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: var(--size-xs);
+  line-height: var(--size-xs-lh);
+  font-weight: var(--weight-medium);
+  color: var(--slate-500);
+  transition: var(--transicion);
+}
+
+.enlace-volver > svg {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+.enlace-volver:hover {
+  color: var(--slate-800);
+}
+
+/* ---- bloque de datos en dos columnas ---- */
+.datos-dos-columnas {
+  display: grid;
+  gap: 0.625rem;
+}
+
+@media (min-width: 640px) {
+  .datos-dos-columnas {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* ---- caja punteada de espera ---- */
+.caja-vacia {
+  border: 1px dashed var(--slate-200);
+  border-radius: var(--radius-xl);
+  padding: 2.5rem 1rem;
+  text-align: center;
+}
+
+.caja-vacia-alta {
+  padding-block: 3rem;
+}
+
+.caja-vacia > svg {
+  width: 2rem;
+  height: 2rem;
+  margin-inline: auto;
+  color: var(--slate-300);
+}
+
+.caja-vacia-titulo {
+  font-size: var(--size-sm);
+  line-height: var(--size-sm-lh);
+  font-weight: var(--weight-medium);
+  color: var(--slate-700);
+}
+
+.caja-vacia > svg + .caja-vacia-titulo {
+  margin-block-start: 0.75rem;
+}
+
+.caja-vacia-detalle {
+  margin-block-start: 0.25rem;
+  font-size: var(--size-xs);
+  line-height: var(--size-xs-lh);
+  color: var(--slate-500);
+}
+
+/* ---- reporte del contrato ---- */
+.reporte-cargando {
+  padding: 1.25rem;
+}
+
+.reporte-cargando > * + * {
+  margin-block-start: 0.75rem;
+}
+
+.reporte-trazo {
+  height: 1rem;
+  border-radius: var(--radius);
+  background-color: var(--slate-100);
+  animation: pulso 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.reporte-trazo-uno {
+  width: 66.6667%;
+}
+
+.reporte-trazo-dos {
+  width: 50%;
+}
+
+.reporte-trazo-tres {
+  width: 75%;
+}
+
+.reporte-grid {
+  display: grid;
+  gap: 1rem;
+  padding: 1.25rem;
+}
+
+@media (min-width: 768px) {
+  .reporte-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.reporte-seccion {
+  border: 1px solid var(--slate-100);
+  border-radius: var(--radius-xl);
+  padding: 1rem;
+}
+
+.reporte-seccion-titulo {
+  font-size: var(--size-xs);
+  line-height: var(--size-xs-lh);
+  font-weight: var(--weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wider);
+  color: var(--brand-700);
+}
+
+.reporte-lista {
+  margin-block-start: 0.75rem;
+}
+
+.reporte-lista > * + * {
+  margin-block-start: 0.125rem;
+}
+
+.reporte-fila {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  border-block-end: 1px solid var(--slate-50);
+  padding-block: 0.375rem;
+}
+
+.reporte-fila:last-child {
+  border-block-end: 0;
+}
+
+.reporte-clave {
+  font-size: var(--size-xs);
+  line-height: var(--size-xs-lh);
+  color: var(--slate-500);
+}
+
+.reporte-valor {
+  text-align: right;
+  overflow-wrap: break-word;
+  font-size: var(--size-xs);
+  line-height: var(--size-xs-lh);
+  font-weight: var(--weight-medium);
+  color: var(--slate-800);
+}
+
+.reporte-nota {
+  margin-block-start: 0.5rem;
+  border-radius: var(--radius-lg);
+  background-color: var(--amber-50);
+  padding: 0.375rem 0.625rem;
+  font-size: 11px;
+  color: var(--amber-700);
+}
+
+/* ---- leyenda de cuentas por secretaría ---- */
+.leyenda-cuentas {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 11px;
+  color: var(--slate-500);
+}
+
+.leyenda-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.leyenda-muestra {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: var(--radius-full);
+}
+
+/* ---- filtros de período sobre la gráfica de cuentas ---- */
+.filtro-fila {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+
+.campo-check {
+  display: inline-flex;
+  height: 2.25rem;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-xl);
+  background-color: var(--surface);
+  padding: 0 0.75rem;
+  font-size: var(--size-xs);
+  line-height: var(--size-xs-lh);
+  font-weight: var(--weight-medium);
+  color: var(--slate-600);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+}
+
+.campo-check-input {
+  width: 0.875rem;
+  height: 0.875rem;
+  accent-color: var(--brand-600);
+}
+
+/* ---- lista de eventos del monitor CDC ---- */
+.busqueda-barra {
+  border-block-end: 1px solid var(--slate-100);
+  padding: 0.75rem 1rem;
+}
+
+.lista-eventos {
+  max-height: 620px;
+  overflow-y: auto;
+}
+
+.lista-eventos > * + * {
+  border-block-start: 1px solid var(--slate-100);
+}
+
+.evento-boton {
+  display: block;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  text-align: left;
+  transition: var(--transicion);
+}
+
+.evento-boton:hover {
+  background-color: var(--slate-50);
+}
+
+.evento-boton[aria-pressed='true'] {
+  background-color: var(--brand-50-a70);
+}
+
+.evento-linea {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.evento-punto {
+  width: 0.5rem;
+  height: 0.5rem;
+  flex-shrink: 0;
+  border-radius: var(--radius-full);
+}
+
+.evento-punto-marca {
+  background-color: var(--brand-500);
+}
+
+.evento-contrato {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--size-xs);
+  line-height: var(--size-xs-lh);
+  font-weight: var(--weight-semibold);
+  color: var(--slate-800);
+}
+
+.evento-tiempo {
+  margin-inline-start: auto;
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--slate-400);
+}
+
+.evento-etiquetas {
+  display: flex;
+  margin-block-start: 0.375rem;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem;
+  padding-inline-start: 1rem;
+}
+
+.evento-nombre {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--slate-500);
+}
+
+.aviso-pausa {
+  border-block-start: 1px solid var(--amber-100);
+  background-color: var(--amber-50);
+  padding: 0.5rem 1rem;
+  font-size: 11px;
+  color: var(--amber-700);
+}
+
+/* ---- detalle del evento seleccionado ---- */
+.evento-cuerpo > * + * {
+  margin-block-start: 1rem;
+}
+
+.detalle-evento {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  border: 1px solid var(--slate-100);
+  border-radius: var(--radius-xl);
+  background-color: var(--slate-50-a70);
+  padding: 0.75rem 1rem;
+}
+
+.detalle-evento-contrato {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--size-sm);
+  line-height: var(--size-sm-lh);
+  font-weight: var(--weight-semibold);
+  color: var(--slate-900);
+}
+
+.detalle-evento-meta {
+  font-size: 11px;
+  color: var(--slate-500);
+}
+
+.detalle-evento-marca {
+  display: flex;
+  margin-inline-start: auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* ---- pista del pie de las tarjetas analíticas ---- */
+.pie-analitico {
+  font-size: 11px;
+  color: var(--slate-500);
+}
+
+.pie-analitico-cifra {
+  font-weight: var(--weight-semibold);
+  color: var(--slate-700);
+}
+
+/* ---- fila de la lista de eventos del contrato (detalle) ---- */
+.fila-evento {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1.25rem;
+}
+
+.fila-evento-tipo {
+  font-size: var(--size-xs);
+  line-height: var(--size-xs-lh);
+  font-weight: var(--weight-semibold);
+  color: var(--slate-700);
+}
+
+.fila-evento-estado {
+  font-size: var(--size-xs);
+  line-height: var(--size-xs-lh);
+  color: var(--slate-500);
+}
+
+.fila-evento-hora {
+  margin-inline-start: auto;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--slate-400);
+}

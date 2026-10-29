@@ -62,6 +62,20 @@ cdc-offsets.dat.*
 *.dat
 
 # ============================================
+# FRONTEND
+# ============================================
+frontend/node_modules/
+frontend/dist/
+frontend/coverage/
+frontend/.env
+frontend/.env.local
+
+# Variables de entorno de Docker Compose
+.env
+.env.qa
+.env.local
+
+# ============================================
 # ARCHIVOS DEL SISTEMA
 # ============================================
 .DS_Store

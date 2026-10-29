@@ -1,0 +1,144 @@
+/* ============================================
+   TONOS · el JSX declara [data-tone] y [data-cdc];
+   aquí solo se asignan variables, nunca selectores de utilidad.
+   Cada bloque declara el mismo set de variables para que cualquier
+   componente pueda leerlas sin saber qué tono recibió.
+   ============================================ */
+
+[data-tone='success'],
+[data-tone='emerald'] {
+  --tone-border: var(--emerald-200);
+  --tone-bg: var(--emerald-50);
+  --tone-bg-soft: var(--emerald-50-a60);
+  --tone-text: var(--emerald-700);
+  --tone-text-strong: var(--emerald-600);
+  --tone-icon-bg: var(--emerald-100);
+  --tone-icon-text: var(--emerald-700);
+  --tone-dot: var(--emerald-500);
+  --tone-fill: var(--emerald-500);
+
+  --tone-kpi-bg: var(--emerald-50);
+  --tone-kpi-text: var(--emerald-700);
+}
+
+[data-tone='warning'],
+[data-tone='amber'] {
+  --tone-border: var(--amber-200);
+  --tone-bg: var(--amber-50);
+  --tone-bg-soft: var(--amber-50-a60);
+  --tone-text: var(--amber-700);
+  --tone-text-strong: var(--amber-600);
+  --tone-icon-bg: var(--amber-100);
+  --tone-icon-text: var(--amber-700);
+  --tone-dot: var(--amber-500);
+  --tone-fill: var(--amber-500);
+
+  --tone-kpi-bg: var(--amber-50);
+  --tone-kpi-text: var(--amber-700);
+}
+
+[data-tone='danger'],
+[data-tone='rose'] {
+  --tone-border: var(--rose-200);
+  --tone-bg: var(--rose-50);
+  --tone-bg-soft: var(--rose-50-a60);
+  --tone-text: var(--rose-700);
+  --tone-text-strong: var(--rose-600);
+  --tone-icon-bg: var(--rose-100);
+  --tone-icon-text: var(--rose-700);
+  --tone-dot: var(--rose-500);
+  --tone-fill: var(--rose-500);
+
+  --tone-kpi-bg: var(--rose-50);
+  --tone-kpi-text: var(--rose-700);
+}
+
+[data-tone='info'],
+[data-tone='sky'] {
+  --tone-border: var(--sky-200);
+  --tone-bg: var(--sky-50);
+  --tone-bg-soft: var(--sky-50-a60);
+  --tone-text: var(--sky-700);
+  --tone-text-strong: var(--sky-600);
+  --tone-icon-bg: var(--sky-100);
+  --tone-icon-text: var(--sky-700);
+  --tone-dot: var(--sky-500);
+  --tone-fill: var(--sky-500);
+
+  --tone-kpi-bg: var(--sky-50);
+  --tone-kpi-text: var(--sky-700);
+}
+
+[data-tone='neutral'],
+[data-tone='slate'] {
+  --tone-border: var(--slate-200);
+  --tone-bg: var(--slate-50);
+  --tone-bg-soft: var(--slate-50-a60);
+  --tone-text: var(--slate-600);
+  --tone-text-strong: var(--slate-400);
+  --tone-icon-bg: var(--slate-100);
+  --tone-icon-text: var(--slate-400);
+  --tone-dot: var(--slate-400);
+  --tone-fill: var(--slate-400);
+
+  --tone-kpi-bg: var(--slate-100);
+  --tone-kpi-text: var(--slate-600);
+}
+
+[data-tone='violet'] {
+  --tone-border: var(--violet-50);
+  --tone-bg: var(--violet-50);
+  --tone-bg-soft: var(--violet-50);
+  --tone-text: var(--violet-700);
+  --tone-text-strong: var(--violet-700);
+  --tone-icon-bg: var(--violet-50);
+  --tone-icon-text: var(--violet-700);
+  --tone-dot: var(--violet-700);
+  --tone-fill: var(--violet-700);
+
+  --tone-kpi-bg: var(--violet-50);
+  --tone-kpi-text: var(--violet-700);
+}
+
+/* ---- marca GE-COR: globo con degradado, texto azul ---- */
+[data-tone='brand'] {
+  --tone-border: var(--brand-200);
+  --tone-bg: var(--brand-50);
+  --tone-bg-soft: var(--brand-50-a70);
+  --tone-text: var(--brand-700);
+  --tone-text-strong: var(--brand-600);
+  --tone-icon-bg: var(--brand-50);
+  --tone-icon-text: var(--brand-700);
+  --tone-dot: var(--brand-500);
+  --tone-fill: var(--brand-500);
+  --tone-bg-image: var(--kpi-icono-brand);
+  --tone-kpi-image: var(--kpi-icono-brand);
+  --tone-kpi-bg: transparent;
+  --tone-kpi-text: var(--brand-700);
+}
+
+/* ---- píldora CDC: vive sobre la barra de navegación azul,
+       por eso usa la escala -300 y alfas propias ---- */
+[data-cdc='connected'] {
+  --cdc-dot: var(--emerald-300);
+  --cdc-ping: var(--emerald-300-a70);
+  --cdc-bg: var(--emerald-400-a10);
+  --cdc-border: var(--emerald-200-a30);
+  --cdc-text: #ffffff;
+}
+
+[data-cdc='connecting'] {
+  --cdc-dot: var(--amber-300);
+  --cdc-ping: transparent;
+  --cdc-bg: var(--amber-300-a10);
+  --cdc-border: var(--amber-200-a40);
+  --cdc-text: var(--amber-50);
+}
+
+[data-cdc='disconnected'] {
+  --cdc-dot: var(--rose-300);
+  --cdc-ping: transparent;
+  --cdc-bg: var(--rose-400-a15);
+  --cdc-border: var(--rose-200-a40);
+  --cdc-text: var(--rose-50);
+}

@@ -1,0 +1,36 @@
+.git
+.gitignore
+.gitattributes
+.idea
+.vscode
+.settings
+.classpath
+.project
+.factorypath
+
+# Artefactos de compilación
+**/target
+frontend/node_modules
+frontend/dist
+frontend/coverage
+
+# Variables de entorno (no viajan en la imagen)
+.env
+.env.qa
+.env.local
+
+# Configuración local con credenciales (se usa application-docker.properties)
+**/application.properties
+
+# Offsets y logs de CDC
+cdc-offsets.dat
+cdc-offsets.dat.*
+*.log
+logs
+
+# Documentación
+backend/REQUISITOS-CDC-POSTGRESQL.docx
+
+# Sistema
+.DS_Store
+Thumbs.db
