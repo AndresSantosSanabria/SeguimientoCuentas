@@ -472,6 +472,11 @@
   gap: 0.5rem;
 }
 
+/* acción de descarga al final de la fila de filtros */
+.filtro-accion {
+  margin-left: auto;
+}
+
 .campo-check {
   display: inline-flex;
   height: 2.25rem;

@@ -1,12 +1,12 @@
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
-import { formatNumber, formatPercent } from '@/lib/format';
+import { formatNumber, formatPercentReal } from '@/lib/format';
 import { ChartTooltip } from '@/components/charts/ChartTooltip';
 
-export function SupervisionDonut({ conSupervision, sinSupervision, cobertura }) {
-  const total = conSupervision + sinSupervision;
+export function EstadoCuentasDonut({ enProceso, devolucionRechazo, pctEnProceso }) {
+  const total = enProceso + devolucionRechazo;
   const data = [
-    { label: 'Con supervisión', value: conSupervision, color: '#1e7fd8' },
-    { label: 'Sin supervisión', value: sinSupervision, color: '#cbd5e1' },
+    { label: 'En proceso', value: enProceso, color: '#1e7fd8' },
+    { label: 'Devolución o rechazo', value: devolucionRechazo, color: '#f43f5e' },
   ];
   return (
     <div className="donut">
@@ -31,8 +31,8 @@ export function SupervisionDonut({ conSupervision, sinSupervision, cobertura }) 
           </PieChart>
         </ResponsiveContainer>
         <div className="donut-centro">
-          <span className="donut-cobertura">{formatPercent(cobertura, 1)}</span>
-          <span className="donut-sub">Cobertura</span>
+          <span className="donut-cobertura">{formatPercentReal(pctEnProceso, 2)}</span>
+          <span className="donut-sub">En proceso</span>
         </div>
       </div>
 

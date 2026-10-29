@@ -1,4 +1,4 @@
-import { formatNumber, formatPercent } from '@/lib/format';
+import { formatNumber, formatPercentReal } from '@/lib/format';
 
 export function ChartTooltip({ active, payload, label, total }) {
   if (!active || !payload || payload.length === 0) return null;
@@ -24,7 +24,7 @@ export function ChartTooltip({ active, payload, label, total }) {
               <span className="tooltip-valor">
                 {formatNumber(value)}
                 {total && total > 0 ? (
-                  <span className="tooltip-porcentaje">({formatPercent((value / total) * 100, 1)})</span>
+                  <span className="tooltip-porcentaje">({formatPercentReal((value / total) * 100, 2)})</span>
                 ) : null}
               </span>
             </div>

@@ -34,12 +34,37 @@ export function secretariasDisponibles(contratos) {
     }
     return [...labels].sort((a, b) => a.localeCompare(b, 'es'));
 }
-export function cortePeriodo(anio, mes, hoy = startOfDay(new Date())) {
-    const finPeriodo = mes === 'todos' ? new Date(anio, 11, 31) : new Date(anio, mes, 0);
+export function cortePeriodo(anio, mes, hoy = startOfDay(new Date()), mesHasta = null) {
+    const { hasta } = rangoMeses(mes, mesHasta);
+    const finPeriodo = new Date(anio, hasta, 0);
     return hoy.getTime() < finPeriodo.getTime() ? hoy : finPeriodo;
 }
-export function periodoLabel(anio, mes) {
-    return mes === 'todos' ? `Año ${anio}` : `${MESES[mes - 1]} ${anio}`;
+/**
+ * Normaliza «Mes» + «Hasta» a un rango [desde, hasta] (1–12).
+ * Sin «Hasta» conserva el comportamiento anterior: un solo mes o el año completo.
+ * Si el usuario elige un «Hasta» anterior al «Mes», el rango se intercambia.
+ */
+export function rangoMeses(mes, mesHasta = null) {
+    const sinHasta = mesHasta === null || mesHasta === undefined || mesHasta === '' || mesHasta === 'todos';
+    let desde = mes === 'todos' ? 1 : Number(mes);
+    let hasta = sinHasta ? (mes === 'todos' ? 12 : desde) : Number(mesHasta);
+    if (!Number.isFinite(desde)) desde = 1;
+    if (!Number.isFinite(hasta)) hasta = 12;
+    if (hasta < desde) {
+        const temporal = desde;
+        desde = hasta;
+        hasta = temporal;
+    }
+    return { desde, hasta };
+}
+export function periodoLabel(anio, mes, mesHasta = null) {
+    const sinHasta = mesHasta === null || mesHasta === undefined || mesHasta === '' || mesHasta === 'todos';
+    if (mes === 'todos' && sinHasta)
+        return `Año ${anio}`;
+    const { desde, hasta } = rangoMeses(mes, mesHasta);
+    if (desde === hasta)
+        return `${MESES[desde - 1]} ${anio}`;
+    return `${MESES[desde - 1]} – ${MESES[hasta - 1]} ${anio}`;
 }
 function parseFechaContrato(value) {
     const fecha = parseDateOnly(value);
@@ -67,14 +92,14 @@ function cuentasExigiblesAlCorte(inicio, fin, corte) {
     }
     return exigibles;
 }
-function plusMonths(date, months) {
+export function plusMonths(date, months) {
     const total = date.getMonth() + months;
     const anio = date.getFullYear() + Math.floor(total / 12);
     const mes = ((total % 12) + 12) % 12;
     const ultimoDia = new Date(anio, mes + 1, 0).getDate();
     return new Date(anio, mes, Math.min(date.getDate(), ultimoDia));
 }
-function mesesEsperados(inicio, fin) {
+export function mesesEsperados(inicio, fin) {
     let anios = fin.getFullYear() - inicio.getFullYear();
     let meses = fin.getMonth() - inicio.getMonth();
     let dias = fin.getDate() - inicio.getDate();
@@ -91,7 +116,7 @@ function mesesEsperados(inicio, fin) {
     return Math.max(1, total);
 }
 export function buildCuentasSecretaria(contratos, filtros, hoy = new Date()) {
-    const corte = cortePeriodo(filtros.anio, filtros.mes, startOfDay(hoy));
+    const corte = cortePeriodo(filtros.anio, filtros.mes, startOfDay(hoy), filtros.mesHasta ?? null);
     const mapa = new Map();
     let totalCompletadas = 0;
     let totalPendientes = 0;

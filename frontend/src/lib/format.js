@@ -12,10 +12,22 @@ export function formatPercent(value, digits = 1) {
     if (value === null || value === undefined || !Number.isFinite(value)) {
         return '—';
     }
-    const formatter = digits === 0
-        ? new Intl.NumberFormat('es-CO', { maximumFractionDigits: 0 })
-        : percentFormatter;
+    const formatter = digits === 1
+        ? percentFormatter
+        : new Intl.NumberFormat('es-CO', { maximumFractionDigits: digits });
     return `${formatter.format(value)}%`;
+}
+/**
+ * Igual que formatPercent pero nunca redondea un valor < 100 hacia "100%".
+ * Útil en segmentos casi nulos de gráficos (p. ej. 99,9919% ≠ 100%).
+ */
+export function formatPercentReal(value, digits = 2) {
+    if (value === null || value === undefined || !Number.isFinite(value)) {
+        return '—';
+    }
+    const redondeado = Math.round(value * 10 ** digits) / 10 ** digits;
+    const usados = redondeado >= 100 && value < 100 ? digits + 3 : digits;
+    return formatPercent(value, usados);
 }
 export function clamp(value, min, max) {
     return Math.min(max, Math.max(min, value));

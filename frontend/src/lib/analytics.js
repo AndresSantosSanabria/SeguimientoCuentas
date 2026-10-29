@@ -220,12 +220,21 @@ export function computeAnalytics(contratos) {
             href: '/contratos?alerta=sin-supervision',
         },
     ];
+    const enProceso = kpis.totalContratos - rechazados - devueltos;
     return {
         kpis: {
             ...kpis,
             avancePromedio: kpis.totalContratos > 0 ? Math.round((sumaAvance / kpis.totalContratos) * 10) / 10 : 0,
         },
         estados,
+        estadoCuentas: {
+            enProceso,
+            devolucionRechazo: rechazados + devueltos,
+            devueltos,
+            rechazados,
+            total: kpis.totalContratos,
+            pctEnProceso: kpis.totalContratos > 0 ? (enProceso / kpis.totalContratos) * 100 : 0,
+        },
         avances,
         dependencias,
         vencimientos,
