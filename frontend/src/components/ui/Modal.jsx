@@ -1,7 +1,7 @@
 import { X } from 'lucide-react';
 import { useEffect } from 'react';
 
-export function Modal({ title, subtitle, onClose, children, className = '' }) {
+export function Modal({ title, subtitle, onClose, children, className = '', action = null }) {
   useEffect(() => {
     const onKey = (event) => {
       if (event.key === 'Escape') onClose();
@@ -24,6 +24,7 @@ export function Modal({ title, subtitle, onClose, children, className = '' }) {
             <h2 className="modal-title">{title}</h2>
             {subtitle ? <p className="modal-subtitulo">{subtitle}</p> : null}
           </div>
+          {action ? <div className="modal-accion">{action}</div> : null}
           <button type="button" className="modal-close" onClick={onClose} aria-label="Cerrar">
             <X />
           </button>

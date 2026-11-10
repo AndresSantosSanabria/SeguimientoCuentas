@@ -1,45 +1,82 @@
 package com.sgcc.seguimientocuentas.contratos.domain.service;
 
-import com.sgcc.seguimientocuentas.common.dto.ContratoResumenDTO;
-import com.sgcc.seguimientocuentas.common.dto.CuentaDetalleDTO;
-import com.sgcc.seguimientocuentas.common.dto.CuentaPasoDTO;
-import com.sgcc.seguimientocuentas.contratos.domain.model.*;
-import com.sgcc.seguimientocuentas.contratos.adapter.out.jpa.*;
+import com.sgcc.seguimientocuentas.contratos.adapter.out.jpa.CtPEstadoRepository;
+import com.sgcc.seguimientocuentas.contratos.adapter.out.jpa.CtTContratoSapRepository;
+import com.sgcc.seguimientocuentas.contratos.adapter.out.jpa.CtTRazabilidadRepository;
+import com.sgcc.seguimientocuentas.contratos.adapter.out.jpa.CtTSupervisionRepository;
+import com.sgcc.seguimientocuentas.contratos.adapter.out.jpa.ContratoResumenProyeccion;
+import com.sgcc.seguimientocuentas.contratos.adapter.out.jpa.InformeActividadJdbcRepository;
+import com.sgcc.seguimientocuentas.contratos.adapter.out.jpa.InformeActividadRow;
+import com.sgcc.seguimientocuentas.contratos.adapter.out.jpa.SupervisionJdbcRepository;
 import com.sgcc.seguimientocuentas.contratos.adapter.out.jpa.SupervisionJdbcRepository.UltimaSupervision;
+import com.sgcc.seguimientocuentas.contratos.adapter.out.jpa.SupervisorJdbcRepository;
+import com.sgcc.seguimientocuentas.contratos.domain.model.Catalogos;
+import com.sgcc.seguimientocuentas.contratos.domain.model.CtPEstado;
+import com.sgcc.seguimientocuentas.contratos.domain.model.CtTContratoSap;
+import com.sgcc.seguimientocuentas.contratos.domain.model.CtTRazabilidad;
+import com.sgcc.seguimientocuentas.contratos.domain.model.CtTSupervision;
+import com.sgcc.seguimientocuentas.contratos.domain.model.FichaContrato;
+import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
-import jakarta.annotation.PostConstruct;
 import java.time.LocalDate;
-import java.time.Period;
-import java.util.*;
-import java.util.stream.Collectors;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * Lee la base y la traduce a fichas en memoria. Es el unico sitio que toca SQL para el resumen:
+ * se llama al arrancar, cuando el CDC menciona un contrato que no esta en memoria, y cuando el
+ * motor Debezium se reconecta. El resto del tiempo el CDC parcha las fichas sin consultar nada.
+ */
 @Service
 public class ContratoProgresoService {
 
     private static final Logger log = LoggerFactory.getLogger(ContratoProgresoService.class);
 
+    private static final Map<Integer, String> SIGUIENTES_PASOS = Map.ofEntries(
+            Map.entry(1, "Enviar informe de actividades a revisión"),
+            Map.entry(2, "Supervisor revisa y aprueba o rechaza"),
+            Map.entry(3, "Contratista corrige y reenvía el informe"),
+            Map.entry(4, "Firmar informe de actividades"),
+            Map.entry(5, "Solicitar pantallas SECOP y firmar"),
+            Map.entry(6, "Cargar pantallas SECOP"),
+            Map.entry(7, "Supervisor aprueba o rechaza SECOP"),
+            Map.entry(8, "Corregir pantallas SECOP"),
+            Map.entry(9, "Registrar supervisión"),
+            Map.entry(10, "Contratista corrige y reenvía el informe"),
+            Map.entry(11, "Crear RAS"),
+            Map.entry(12, "Enviar informe al enlace"),
+            Map.entry(13, "Enviar informe al área jurídica"),
+            Map.entry(14, "Enviar informe al usuario MM"),
+            Map.entry(15, "Enviar informe al usuario FI"),
+            Map.entry(16, "Enviar informe al ordenador del gasto"),
+            Map.entry(17, "Enviar informe a tesorería"),
+            Map.entry(18, "Aprobación final por tesorería"),
+            Map.entry(19, "Proceso completado")
+    );
+
     private final CtTContratoSapRepository contratoSapRepository;
     private final CtTSupervisionRepository supervisionRepository;
     private final SupervisionJdbcRepository supervisionJdbcRepository;
     private final CtTRazabilidadRepository trazabilidadRepository;
-    private final CtTFondosRepository fondosRepository;
-    private final CtPagoRepository pagoRepository;
     private final CtPEstadoRepository estadoRepository;
     private final InformeActividadJdbcRepository informeActividadRepository;
     private final SupervisorJdbcRepository supervisorRepository;
 
-    private Map<Integer, String> estadosMap = new HashMap<>();
-    private Map<Integer, String> siguientesPasosMap = new HashMap<>();
+    private final Map<Integer, String> estadosMap = new ConcurrentHashMap<>();
+    private final Map<Long, String> nombresSupervisor = new ConcurrentHashMap<>();
 
     public ContratoProgresoService(CtTContratoSapRepository contratoSapRepository,
                                     CtTSupervisionRepository supervisionRepository,
                                     SupervisionJdbcRepository supervisionJdbcRepository,
                                     CtTRazabilidadRepository trazabilidadRepository,
-                                    CtTFondosRepository fondosRepository,
-                                    CtPagoRepository pagoRepository,
                                     CtPEstadoRepository estadoRepository,
                                     InformeActividadJdbcRepository informeActividadRepository,
                                     SupervisorJdbcRepository supervisorRepository) {
@@ -47,8 +84,6 @@ public class ContratoProgresoService {
         this.supervisionRepository = supervisionRepository;
         this.supervisionJdbcRepository = supervisionJdbcRepository;
         this.trazabilidadRepository = trazabilidadRepository;
-        this.fondosRepository = fondosRepository;
-        this.pagoRepository = pagoRepository;
         this.estadoRepository = estadoRepository;
         this.informeActividadRepository = informeActividadRepository;
         this.supervisorRepository = supervisorRepository;
@@ -56,32 +91,137 @@ public class ContratoProgresoService {
 
     @PostConstruct
     public void init() {
-        List<CtPEstado> estados = estadoRepository.findAll();
-        for (CtPEstado e : estados) {
-            estadosMap.put(e.getId(), e.getDescripcion());
+        recargarEstados();
+        recargarSupervisores();
+        log.info("Catalogos listos: {} estados y {} supervisores", estadosMap.size(), nombresSupervisor.size());
+    }
+
+    public Catalogos catalogos() {
+        return new Catalogos(Map.copyOf(estadosMap), SIGUIENTES_PASOS, Map.copyOf(nombresSupervisor));
+    }
+
+    /** Texto de los estados: cambia rara vez, y el CDC de ct_p_estado avisa cuando cambia. */
+    public void recargarEstados() {
+        try {
+            Map<Integer, String> leidos = new LinkedHashMap<>();
+            for (CtPEstado estado : estadoRepository.findAll()) {
+                if (estado.getId() != null && estado.getDescripcion() != null) {
+                    leidos.put(estado.getId(), estado.getDescripcion());
+                }
+            }
+            if (!leidos.isEmpty()) {
+                estadosMap.clear();
+                estadosMap.putAll(leidos);
+            }
+        } catch (Exception e) {
+            log.warn("No se pudo leer ct_p_estado: {}", e.getMessage());
+        }
+    }
+
+    public void recargarSupervisores() {
+        try {
+            nombresSupervisor.clear();
+            nombresSupervisor.putAll(supervisorRepository.nombresPorId());
+        } catch (Exception e) {
+            log.warn("No se pudo leer t_usuarios: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Reconstruye todas las fichas desde la base. Es la unica consulta pesada del sistema y ocurre
+     * dos veces en la vida del proceso: al arrancar y cuando el motor CDC vuelve a conectarse.
+     */
+    public List<FichaContrato> cargarFichas() {
+        long inicio = System.currentTimeMillis();
+        Map<String, FichaContrato> fichas = new LinkedHashMap<>();
+        for (ContratoResumenProyeccion contrato : contratoSapRepository.findContratosResumen()) {
+            fichas.put(contrato.getNoContrato(), ficha(contrato));
         }
 
-        siguientesPasosMap.put(1, "Enviar informe de actividades a revisión");
-        siguientesPasosMap.put(2, "Supervisor revisa y aprueba o rechaza");
-        siguientesPasosMap.put(3, "Contratista corrige y reenvía el informe");
-        siguientesPasosMap.put(4, "Firmar informe de actividades");
-        siguientesPasosMap.put(5, "Solicitar pantallas SECOP y firmar");
-        siguientesPasosMap.put(6, "Cargar pantallas SECOP");
-        siguientesPasosMap.put(7, "Supervisor aprueba o rechaza SECOP");
-        siguientesPasosMap.put(8, "Corregir pantallas SECOP");
-        siguientesPasosMap.put(9, "Registrar supervisión");
-        siguientesPasosMap.put(10, "Contratista corrige y reenvía el informe");
-        siguientesPasosMap.put(11, "Crear RAS");
-        siguientesPasosMap.put(12, "Enviar informe al enlace");
-        siguientesPasosMap.put(13, "Enviar informe al área jurídica");
-        siguientesPasosMap.put(14, "Enviar informe al usuario MM");
-        siguientesPasosMap.put(15, "Enviar informe al usuario FI");
-        siguientesPasosMap.put(16, "Enviar informe al ordenador del gasto");
-        siguientesPasosMap.put(17, "Enviar informe a tesorería");
-        siguientesPasosMap.put(18, "Aprobación final por tesorería");
-        siguientesPasosMap.put(19, "Proceso completado");
+        for (CtTRazabilidad traza : trazabilidadRepository.findUltimaDeTodos()) {
+            anadirTraza(fichas, traza);
+        }
+        for (CtTRazabilidad traza : trazabilidadRepository.findPorInformeDeTodos()) {
+            anadirTraza(fichas, traza);
+        }
+        for (InformeActividadRow informe : informeActividadRepository.listarTodos()) {
+            FichaContrato ficha = fichas.get(informe.noContrato());
+            if (ficha != null) {
+                ficha.ponerInforme(informe);
+            }
+        }
+        supervisionJdbcRepository.ultimaDeTodos().forEach((noContrato, supervision) -> {
+            FichaContrato ficha = fichas.get(noContrato);
+            if (ficha != null) {
+                ficha.setSupervision(supervision.total(), supervision.porcentajeAvance(), supervision.idSupervisor());
+            }
+        });
 
-        log.info("Estados cargados desde ct_p_estado: {}", estadosMap.size());
+        Catalogos catalogos = catalogos();
+        LocalDate hoy = LocalDate.now();
+        List<FichaContrato> resultado = new ArrayList<>(fichas.size());
+        for (FichaContrato ficha : fichas.values()) {
+            synchronized (ficha) {
+                ficha.recalcular(catalogos, hoy);
+            }
+            resultado.add(ficha);
+        }
+        log.info("Fichas cargadas desde la base: {} contratos en {} ms",
+                resultado.size(), System.currentTimeMillis() - inicio);
+        return resultado;
+    }
+
+    /**
+     * Ficha de un contrato que el CDC menciona y todavia no esta en memoria (un contrato recién
+     * creado, o uno que todavia no existia cuando se lleno el indice). Cuatro consultas chicas.
+     */
+    public FichaContrato cargarFicha(String noContrato) {
+        Optional<CtTContratoSap> contrato = contratoSapRepository.findByNoContrato(noContrato);
+        if (contrato.isEmpty() || !apareceEnResumen(contrato.get().getContratista())) {
+            return null;
+        }
+
+        CtTContratoSap origen = contrato.get();
+        FichaContrato ficha = new FichaContrato(origen.getId(), origen.getNoContrato(), origen.getContratista(),
+                origen.getDependencia(), origen.getFechaInicio(), origen.getFechaFin());
+        for (CtTRazabilidad traza : trazabilidadRepository.findByNoContratoOrderByIdAsc(noContrato)) {
+            ficha.ponerTraza(traza);
+        }
+        for (InformeActividadRow informe : informeActividadRepository.listarPorContrato(noContrato)) {
+            ficha.ponerInforme(informe);
+        }
+        UltimaSupervision supervision = supervisionJdbcRepository
+                .ultimaDeContratos(List.of(noContrato))
+                .get(noContrato);
+        if (supervision != null) {
+            ficha.setSupervision(supervision.total(), supervision.porcentajeAvance(), supervision.idSupervisor());
+        }
+        synchronized (ficha) {
+            ficha.recalcular(catalogos(), LocalDate.now());
+        }
+        return ficha;
+    }
+
+    /** Refresca la agregacion de supervision de unos pocos contratos; es la unica que no cabe en memoria. */
+    public Map<String, UltimaSupervision> refrescarSupervisiones(Collection<String> noContratos) {
+        return supervisionJdbcRepository.ultimaDeContratos(noContratos);
+    }
+
+    private static void anadirTraza(Map<String, FichaContrato> fichas, CtTRazabilidad traza) {
+        FichaContrato ficha = fichas.get(traza.getNoContrato());
+        if (ficha != null) {
+            ficha.ponerTraza(traza);
+        }
+    }
+
+    private static FichaContrato ficha(ContratoResumenProyeccion contrato) {
+        return new FichaContrato(contrato.getId(), contrato.getNoContrato(), contrato.getContratista(),
+                contrato.getDependencia(), contrato.getFechaInicio(), contrato.getFechaFin());
+    }
+
+    /** Mismo filtro que la consulta del resumen: sin contratista no hay contrato que mostrar. */
+    public static boolean apareceEnResumen(String contratista) {
+        return contratista != null && !contratista.isBlank();
     }
 
     public String calcularProgreso(String noContrato) {
@@ -99,7 +239,6 @@ public class ContratoProgresoService {
 
         CtTContratoSap contrato = contratoOpt.get();
         sb.append("  Contratista: ").append(contrato.getContratista()).append("\n");
-        sb.append("  Valor: $").append(String.format("%,.2f", contrato.getValorTotal())).append("\n");
 
         List<CtTSupervision> supervisiones = supervisionRepository.findByNoContratoOrderByNoSupervisionAsc(noContrato);
         CtTSupervision ultimaSupervision = supervisiones.isEmpty() ? null : supervisiones.get(supervisiones.size() - 1);
@@ -124,7 +263,7 @@ public class ContratoProgresoService {
             }
             sb.append("  Fecha: ").append(ultimoRegistro.getFecha()).append("\n");
 
-            String pasoSiguiente = siguientesPasosMap.get(ultimoRegistro.getIdEstado());
+            String pasoSiguiente = SIGUIENTES_PASOS.get(ultimoRegistro.getIdEstado());
             if (pasoSiguiente != null) {
                 sb.append("  Siguiente paso: ").append(pasoSiguiente).append("\n");
             }
@@ -150,225 +289,12 @@ public class ContratoProgresoService {
             }
         }
 
-        List<CtTFondos> fondos = fondosRepository.findByNoContrato(noContrato);
-        sb.append("\n--- RAS ---\n");
-        if (fondos.isEmpty()) {
-            sb.append("  RAS: NO CREADO\n");
-        } else {
-            double totalInicial = fondos.stream().mapToDouble(f -> f.getValorInicial() != null ? f.getValorInicial() : 0).sum();
-            double totalSaldo = fondos.stream().mapToDouble(f -> f.getSaldo() != null ? f.getSaldo() : 0).sum();
-            sb.append("  RAS: CREADO\n");
-            sb.append("  Fondos: ").append(fondos.size()).append("\n");
-            sb.append("  Valor inicial: $").append(String.format("%,.2f", totalInicial)).append("\n");
-            sb.append("  Saldo: $").append(String.format("%,.2f", totalSaldo)).append("\n");
-        }
-
-        List<CtPago> pagos = pagoRepository.findByIdContratoSap(contrato.getId());
-        sb.append("\n--- PAGO ---\n");
-        if (pagos.isEmpty()) {
-            sb.append("  Pagos: NO REGISTRADOS\n");
-        } else {
-            double totalPagado = pagos.stream().mapToDouble(p -> p.getValor() != null ? p.getValor() : 0).sum();
-            sb.append("  Pagos: ").append(pagos.size()).append("\n");
-            sb.append("  Total pagado: $").append(String.format("%,.2f", totalPagado)).append("\n");
-        }
-
         sb.append("\n========================================\n");
 
         return sb.toString();
     }
 
-    public List<ContratoResumenDTO> calcularResumenBatch(List<ContratoResumenProyeccion> contratos) {
-        List<String> noContratos = contratos.stream()
-                .map(ContratoResumenProyeccion::getNoContrato)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toList());
-
-        List<CtTRazabilidad> todasRazabilidades = trazabilidadRepository.findUltimaPorContratos(noContratos);
-        Map<String, CtTRazabilidad> trazabilidadMap = todasRazabilidades.stream()
-                .collect(Collectors.toMap(CtTRazabilidad::getNoContrato, r -> r, (a, b) -> a));
-
-        Map<String, UltimaSupervision> supervisiones = supervisionJdbcRepository.ultimaPorContratos(noContratos);
-        Map<Long, String> nombresSupervisor = supervisorRepository.nombresPorId();
-
-        Map<String, Integer> cuentasMap = informeActividadRepository.contarPorContratos(noContratos);
-
-        List<InformeActividadRow> informes = informeActividadRepository.listarPorContratos(noContratos);
-        Map<String, List<InformeActividadRow>> informesMap = informes.stream()
-                .filter(i -> i.noContrato() != null)
-                .collect(Collectors.groupingBy(InformeActividadRow::noContrato));
-
-        List<CtTRazabilidad> trazasCuentas = trazabilidadRepository.findPorInformeDeContratos(noContratos);
-        Map<Long, List<CtTRazabilidad>> trazasPorInforme = trazasCuentas.stream()
-                .filter(t -> t.getIdInformeActividad() != null)
-                .collect(Collectors.groupingBy(CtTRazabilidad::getIdInformeActividad));
-
-        List<ContratoResumenDTO> resultados = new ArrayList<>();
-        LocalDate hoy = LocalDate.now();
-
-        for (ContratoResumenProyeccion contrato : contratos) {
-            ContratoResumenDTO dto = new ContratoResumenDTO();
-            dto.setId(contrato.getId());
-            dto.setNoContrato(contrato.getNoContrato());
-            dto.setContratista(contrato.getContratista());
-            dto.setDependencia(contrato.getDependencia());
-            dto.setFechaInicio(contrato.getFechaInicio());
-            dto.setFechaFin(contrato.getFechaFin());
-
-            int cuentasRegistradas = cuentasMap.getOrDefault(contrato.getNoContrato(), 0);
-
-            UltimaSupervision supervision = supervisiones.getOrDefault(contrato.getNoContrato(),
-                    UltimaSupervision.SIN_SUPERVISION);
-            dto.setTotalSupervisiones(supervision.total());
-            dto.setTotalSupervisionesEsperadas(12);
-            if (supervision.porcentajeAvance() != null || supervision.idSupervisor() != null) {
-                short declarado = supervision.porcentajeAvance() != null ? supervision.porcentajeAvance() : 0;
-                dto.setAvanceDeclarado(declarado);
-                dto.setPorcentajeAvance(cuentasRegistradas > 0 ? declarado : 0);
-                if (supervision.idSupervisor() != null) {
-                    dto.setSupervisor(nombresSupervisor.get(supervision.idSupervisor()));
-                }
-            }
-
-            dto.setInformeCargado(cuentasRegistradas > 0);
-            LocalDate inicio = parseFechaContrato(contrato.getFechaInicio());
-            LocalDate fin = parseFechaContrato(contrato.getFechaFin());
-            int cuentasEsperadas = mesesEsperados(inicio, fin);
-            int cuentasExigibles = calcularCuentasExigibles(inicio, fin, hoy, cuentasEsperadas);
-            dto.setCuentasRegistradas(cuentasRegistradas);
-            dto.setCuentasEsperadas(cuentasEsperadas);
-            dto.setCuentasExigibles(cuentasExigibles);
-            dto.setCuentasEnMora(Math.max(0, cuentasExigibles - cuentasRegistradas));
-
-            CtTRazabilidad traz = trazabilidadMap.get(contrato.getNoContrato());
-            if (traz != null) {
-                dto.setIdEstadoActual(traz.getIdEstado());
-                dto.setEstadoActual(resolverEstado(traz.getIdEstado()));
-                dto.setDescripcion(traz.getDescripcion());
-                dto.setFechaEstado(traz.getFecha() != null ? traz.getFecha().toString() : null);
-                dto.setSiguientePaso(siguientesPasosMap.get(traz.getIdEstado()));
-            } else {
-                dto.setIdEstadoActual(0);
-                dto.setEstadoActual("SIN INICIO - Contratista debe cargar informe de actividades");
-            }
-
-            List<InformeActividadRow> informesContrato = informesMap.getOrDefault(contrato.getNoContrato(), List.of());
-            Comparator<InformeActividadRow> porActividad = Comparator
-                    .comparingLong((InformeActividadRow i) -> ultimaTrazaId(trazasPorInforme.get(i.id())))
-                    .thenComparingLong(InformeActividadRow::id);
-            long idCuentaActiva = informesContrato.stream()
-                    .filter(i -> cuentaEnProceso(trazasPorInforme.get(i.id())))
-                    .max(porActividad)
-                    .or(() -> informesContrato.stream().max(porActividad))
-                    .map(InformeActividadRow::id)
-                    .orElse(-1L);
-
-            List<CuentaDetalleDTO> cuentasDetalle = new ArrayList<>();
-            for (InformeActividadRow informe : informesContrato) {
-                cuentasDetalle.add(construirCuenta(
-                        informe,
-                        trazasPorInforme.getOrDefault(informe.id(), List.of()),
-                        informe.id() == idCuentaActiva
-                ));
-            }
-            dto.setCuentasDetalle(cuentasDetalle);
-
-            resultados.add(dto);
-        }
-
-        return resultados;
-    }
-
     private String resolverEstado(int idEstado) {
         return estadosMap.getOrDefault(idEstado, "Estado " + idEstado);
-    }
-
-    private static LocalDate parseFechaContrato(String value) {
-        if (value == null || value.isBlank()) return null;
-        String trimmed = value.trim();
-        try {
-            LocalDate fecha = LocalDate.parse(trimmed.substring(0, Math.min(10, trimmed.length())));
-            return (fecha.getYear() >= 1900 && fecha.getYear() <= 2100) ? fecha : null;
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    private static int mesesEsperados(LocalDate inicio, LocalDate fin) {
-        if (inicio == null || fin == null || fin.isBefore(inicio)) return 0;
-        Period periodo = Period.between(inicio, fin);
-        int meses = periodo.getYears() * 12 + periodo.getMonths();
-        if (periodo.getDays() > 0) meses += 1;
-        return Math.max(1, meses);
-    }
-
-    private static int calcularCuentasExigibles(LocalDate inicio, LocalDate fin, LocalDate hoy, int esperadas) {
-        if (inicio == null || hoy == null || esperadas <= 0 || hoy.isBefore(inicio)) return 0;
-        int exigibles = 0;
-        for (int k = 0; k < esperadas; k++) {
-            LocalDate cierre = inicio.plusMonths(k + 1L).minusDays(1);
-            if (fin != null && cierre.isAfter(fin)) cierre = fin;
-            if (cierre.isAfter(hoy)) break;
-            exigibles++;
-        }
-        return exigibles;
-    }
-
-    private static long ultimaTrazaId(List<CtTRazabilidad> trazas) {
-        if (trazas == null || trazas.isEmpty()) return 0L;
-        CtTRazabilidad ultima = trazas.get(trazas.size() - 1);
-        return ultima.getId() != null ? ultima.getId() : 0L;
-    }
-
-    private static boolean cuentaEnProceso(List<CtTRazabilidad> trazas) {
-        if (trazas == null || trazas.isEmpty()) return true;
-        return trazas.get(trazas.size() - 1).getIdEstado() != 19;
-    }
-
-    private CuentaDetalleDTO construirCuenta(InformeActividadRow informe,
-                                             List<CtTRazabilidad> trazas,
-                                             boolean activa) {
-        CuentaDetalleDTO dto = new CuentaDetalleDTO();
-        dto.setIdInformeActividad(informe.id());
-        dto.setNoInforme(informe.noInforme());
-        dto.setNumInforme(informe.numInforme());
-        dto.setTipoInforme(informe.tipoInforme());
-        dto.setRequiereSecop(informe.requiereSecop());
-        dto.setFirmado(informe.firmado());
-        dto.setFechaInicio(informe.fechaInicio() != null ? informe.fechaInicio().toString() : null);
-        dto.setFechaFin(informe.fechaFin() != null ? informe.fechaFin().toString() : null);
-        dto.setActiva(activa);
-
-        List<CuentaPasoDTO> pasos = new ArrayList<>();
-        for (CtTRazabilidad traza : trazas) {
-            CuentaPasoDTO paso = new CuentaPasoDTO();
-            paso.setIdEstado(traza.getIdEstado());
-            paso.setEstado(resolverEstado(traza.getIdEstado()));
-            paso.setFecha(traza.getFecha() != null ? traza.getFecha().toString() : null);
-            paso.setDescripcion(traza.getDescripcion());
-
-            int ultimo = pasos.isEmpty() ? -1 : pasos.get(pasos.size() - 1).getIdEstado();
-            if (ultimo == traza.getIdEstado()) {
-                pasos.set(pasos.size() - 1, paso);
-            } else {
-                pasos.add(paso);
-            }
-        }
-        dto.setPasos(pasos);
-
-        if (!trazas.isEmpty()) {
-            CtTRazabilidad ultima = trazas.get(trazas.size() - 1);
-            dto.setIdEstadoActual(ultima.getIdEstado());
-            dto.setEstadoActual(resolverEstado(ultima.getIdEstado()));
-            dto.setFechaEstado(ultima.getFecha() != null ? ultima.getFecha().toString() : null);
-            dto.setDescripcionEstado(ultima.getDescripcion());
-            dto.setSiguientePaso(siguientesPasosMap.get(ultima.getIdEstado()));
-        } else {
-            dto.setIdEstadoActual(1);
-            dto.setEstadoActual(resolverEstado(1));
-            dto.setSiguientePaso(siguientesPasosMap.get(1));
-        }
-
-        return dto;
     }
 }

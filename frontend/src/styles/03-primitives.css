@@ -98,6 +98,12 @@
   box-shadow: 0 0 0 4px var(--brand-500-a10), var(--shadow-sm);
 }
 
+.input:disabled {
+  background-color: var(--slate-100);
+  color: var(--slate-400);
+  cursor: not-allowed;
+}
+
 .input-corto {
   height: 2.25rem;
 }
@@ -128,12 +134,25 @@
   width: 7rem;
 }
 
+/* Fecha de calendario del rango de cuotas (input type=date). */
+.input-fecha {
+  width: 9.5rem;
+}
+
 .input-mes {
   width: 8rem;
 }
 
-.input-secretaria {
-  width: 13rem;
+.input-situacion {
+  width: 12rem;
+}
+
+.input-alcance {
+  width: 14.5rem;
+}
+
+.input-grupo-estado {
+  width: 12.5rem;
 }
 
 /* ---- botones ---- */
@@ -206,6 +225,24 @@
   box-shadow: 0 0 0 4px var(--slate-300-a40);
 }
 
+/* Botón para superficies claras colocadas sobre un fondo degradado (cabecera del modal). */
+.btn-inverso {
+  border: 1px solid var(--white-a25);
+  background-color: var(--white-a10);
+  color: #ffffff;
+  box-shadow: var(--inset-blanco-20);
+  -webkit-backdrop-filter: var(--blur-8);
+  backdrop-filter: var(--blur-8);
+}
+
+.btn-inverso:hover {
+  background-color: var(--white-a20);
+}
+
+.btn-inverso:focus-visible {
+  box-shadow: 0 0 0 4px var(--white-a30);
+}
+
 /* ---- modal ---- */
 .modal-backdrop {
   position: fixed;
@@ -244,6 +281,13 @@
 
 .modal-cabecera-texto {
   min-width: 0;
+}
+
+.modal-accion {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.75rem;
 }
 
 .modal-title {

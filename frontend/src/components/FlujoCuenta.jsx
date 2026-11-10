@@ -1,25 +1,12 @@
-import { Check, ChevronRight, FileText } from 'lucide-react';
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { FileText } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import { Badge } from '@/components/ui/Badge';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { EstadoBadge } from '@/components/ui/EstadoBadge';
+import { FlujoCuentaDiagrama } from '@/components/FlujoCuentaDiagrama';
 import { formatDate, formatDateTime } from '@/lib/format';
-import {
-  ESTADO_APROBADO,
-  ESTADO_DEVOLUCION,
-  ESTADOS_RECHAZO,
-  estadoLabel,
-  estadoTone,
-} from '@/lib/estados';
-
-function tonoNodo(idEstado, esActual) {
-  if (esActual) return 'actual';
-  if (ESTADOS_RECHAZO.has(idEstado)) return 'danger';
-  if (idEstado === ESTADO_DEVOLUCION) return 'warning';
-  if (idEstado === ESTADO_APROBADO) return 'success';
-  return estadoTone(idEstado);
-}
+import { ESTADO_APROBADO, estadoLabel } from '@/lib/estados';
 
 function Dato({ label, value }) {
   return (
@@ -30,18 +17,9 @@ function Dato({ label, value }) {
   );
 }
 
-function Conector() {
-  return (
-    <div className="flujo-conector">
-      <ChevronRight />
-    </div>
-  );
-}
-
 export function FlujoCuenta({ cuentas }) {
   const [selectedId, setSelectedId] = useState(null);
-  const flowRef = useRef(null);
-  const currentRef = useRef(null);
+
   const cuenta = useMemo(() => {
     if (cuentas.length === 0) return null;
     const explicit =
@@ -50,6 +28,7 @@ export function FlujoCuenta({ cuentas }) {
         : undefined;
     return explicit ?? cuentas.find((item) => item.activa) ?? cuentas[0];
   }, [cuentas, selectedId]);
+
   const pasos = useMemo(() => {
     if (!cuenta) return [];
     if (cuenta.pasos.length > 0) return cuenta.pasos;
@@ -62,18 +41,16 @@ export function FlujoCuenta({ cuentas }) {
       },
     ];
   }, [cuenta]);
+
   useEffect(() => {
-    const container = flowRef.current;
-    const node = currentRef.current;
-    if (!container || !node) return;
-    const target = node.offsetLeft - container.clientWidth / 2 + node.clientWidth / 2;
-    container.scrollLeft = Math.max(0, target);
-  }, [cuenta?.idInformeActividad, pasos.length]);
+    setSelectedId(null);
+  }, [cuentas.length]);
+
   return (
     <Card>
       <CardHeader
         title="Flujo de la cuenta en trámite"
-        subtitle="Recorrido real de la cuenta de cobro radicada. Las cuentas sin informe registrado no se muestran."
+        subtitle="Recorrido real de la cuenta sobre el proceso del contrato: cada parada numerada es la tarea que tocó. En verde lo que ya pasó, en rojo las devoluciones y en naranja el punto donde está hoy; con Reproducir se recorre parada por parada."
         action={
           cuenta ? <EstadoBadge id={cuenta.idEstadoActual} label={cuenta.estadoActual} /> : null
         }
@@ -143,54 +120,7 @@ export function FlujoCuenta({ cuentas }) {
             </p>
           </div>
 
-          <div ref={flowRef} className="flujo-pista">
-            <div className="flujo-cadena">
-              {pasos.map((paso, index) => {
-                const esActual = index === pasos.length - 1;
-                return (
-                  <Fragment key={`${paso.idEstado}-${index}`}>
-                    {index > 0 ? <Conector /> : null}
-                    <div
-                      ref={esActual ? currentRef : undefined}
-                      data-tone={tonoNodo(paso.idEstado, esActual)}
-                      className="flujo-nodo"
-                      title={paso.descripcion ?? undefined}
-                    >
-                      <div className="flujo-nodo-cabecera">
-                        <span className="micro-label micro-label-min">Estado {paso.idEstado}</span>
-                        {esActual ? (
-                          <span className="flujo-nodo-vivo">
-                            <span className="flujo-nodo-vivo-punto parpadeo" />
-                            Actual
-                          </span>
-                        ) : (
-                          <Check className="flujo-nodo-listo" />
-                        )}
-                      </div>
-                      <p className="flujo-nodo-estado">
-                        {estadoLabel(paso.idEstado, paso.estado)}
-                      </p>
-                      <p className="flujo-nodo-fecha">
-                        {paso.fecha ? formatDate(paso.fecha) : 'Sin fecha'}
-                      </p>
-                    </div>
-                  </Fragment>
-                );
-              })}
-
-              {cuenta.siguientePaso && cuenta.idEstadoActual !== ESTADO_APROBADO ? (
-                <>
-                  <Conector />
-                  <div className="flujo-nodo-siguiente">
-                    <span className="micro-label micro-label-min">Siguiente</span>
-                    <p className="flujo-nodo-estado flujo-nodo-estado-proximo">
-                      {cuenta.siguientePaso}
-                    </p>
-                  </div>
-                </>
-              ) : null}
-            </div>
-          </div>
+          <FlujoCuentaDiagrama pasos={pasos} enTramite={cuenta.activa !== false} />
 
           <div className="flujo-datos">
             <Dato
@@ -206,7 +136,14 @@ export function FlujoCuenta({ cuentas }) {
                 )
               }
             />
-            <Dato label="Siguiente paso" value={cuenta.siguientePaso ?? '—'} />
+            <Dato
+              label="Siguiente paso"
+              value={
+                cuenta.idEstadoActual === ESTADO_APROBADO
+                  ? 'Proceso completado'
+                  : (cuenta.siguientePaso ?? '—')
+              }
+            />
           </div>
         </div>
       )}

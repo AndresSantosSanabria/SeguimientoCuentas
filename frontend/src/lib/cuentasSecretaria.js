@@ -34,6 +34,19 @@ export function secretariasDisponibles(contratos) {
     }
     return [...labels].sort((a, b) => a.localeCompare(b, 'es'));
 }
+/**
+ * Lista de secretarías seleccionadas; vacía = todas.
+ * `filtros.secretaria` (texto único) sigue valiendo para los llamados antiguos.
+ */
+export function seleccionSecretarias(filtros) {
+    if (Array.isArray(filtros.secretarias))
+        return filtros.secretarias;
+    return filtros.secretaria ? [filtros.secretaria] : [];
+}
+export function pasaSecretaria(label, filtros) {
+    const seleccion = seleccionSecretarias(filtros);
+    return seleccion.length === 0 || seleccion.includes(label);
+}
 export function cortePeriodo(anio, mes, hoy = startOfDay(new Date()), mesHasta = null) {
     const { hasta } = rangoMeses(mes, mesHasta);
     const finPeriodo = new Date(anio, hasta, 0);
@@ -66,31 +79,107 @@ export function periodoLabel(anio, mes, mesHasta = null) {
         return `${MESES[desde - 1]} ${anio}`;
     return `${MESES[desde - 1]} – ${MESES[hasta - 1]} ${anio}`;
 }
-function parseFechaContrato(value) {
+const FECHA_SIN_INICIO = new Date(1900, 0, 1);
+/**
+ * Rango de calendario [desde, hasta] con precisión de día, desde los inputs
+ * `desdeFecha` / `hastaFecha`. `null` = no hay rango y manda Mes/Hasta.
+ * Un extremo vacío se abre al principio del histórico o a hoy, y si vienen
+ * invertidos se intercambian.
+ */
+export function rangoFechas(filtros, hoy = startOfDay(new Date())) {
+    const inicial = fechaContratoValida(filtros.desdeFecha);
+    const final = fechaContratoValida(filtros.hastaFecha);
+    if (!inicial && !final)
+        return null;
+    const desde = inicial ?? FECHA_SIN_INICIO;
+    const hasta = final ?? startOfDay(hoy);
+    return desde.getTime() <= hasta.getTime()
+        ? { desde, hasta }
+        : { desde: hasta, hasta: desde };
+}
+/** Dos intervalos de días se solapan cuando cada uno empieza antes de que el otro termine. */
+export function solapaRango(inicio, fin, rango) {
+    return inicio.getTime() <= rango.hasta.getTime() && fin.getTime() >= rango.desde.getTime();
+}
+/** Cuota que entra en el cálculo: entre fechas si hay rango, si no en los meses pedidos. */
+export function cuotaVisible(cuota, { anio, desde, hasta, rango }) {
+    if (rango)
+        return solapaRango(cuota.inicio, cuota.fin, rango);
+    return cuota.anio === Number(anio) && cuota.mes >= desde && cuota.mes <= hasta;
+}
+/**
+ * Corte real del cálculo. Con rango de fechas el corte es «Hasta» (tope hoy),
+ * así que radicadas + pendientes cuadran con el mismo número que ve el gráfico.
+ */
+export function corteEfectivo(filtros, hoy = startOfDay(new Date())) {
+    const inicioDia = startOfDay(hoy);
+    const rango = rangoFechas(filtros, inicioDia);
+    if (!rango)
+        return cortePeriodo(filtros.anio, filtros.mes, inicioDia, filtros.mesHasta ?? null);
+    return rango.hasta.getTime() < inicioDia.getTime() ? rango.hasta : inicioDia;
+}
+/** Etiqueta del período en pantalla: el rango de fechas si está activo, si no el mes/año. */
+export function periodoFiltroLabel(filtros, hoy = new Date()) {
+    const rango = rangoFechas(filtros, startOfDay(hoy));
+    if (!rango)
+        return periodoLabel(filtros.anio, filtros.mes, filtros.mesHasta ?? null);
+    const dia = (value) => `${String(value.getDate()).padStart(2, '0')}/${String(value.getMonth() + 1).padStart(2, '0')}/${value.getFullYear()}`;
+    if (rango.desde.getTime() === FECHA_SIN_INICIO.getTime())
+        return `Hasta el ${dia(rango.hasta)}`;
+    if (rango.hasta.getTime() === startOfDay(hoy).getTime())
+        return `Desde el ${dia(rango.desde)}`;
+    return `${dia(rango.desde)} → ${dia(rango.hasta)}`;
+}
+/** Fechas de contrato que tienen sentido; descarta los digitados mal (p. ej. año 2203). */
+export function fechaContratoValida(value) {
     const fecha = parseDateOnly(value);
     if (!fecha)
         return null;
     const anio = fecha.getFullYear();
     return anio >= 1900 && anio <= 2100 ? fecha : null;
 }
-function cuentasExigiblesAlCorte(inicio, fin, corte) {
-    if (!fin)
-        return 0;
-    if (fin.getTime() < inicio.getTime())
-        return 0;
-    if (corte.getTime() < inicio.getTime())
-        return 0;
+const LIMITE_CUOTAS = 2400;
+/**
+ * Cuotas del contrato que ya vencieron al corte. Sin periodo recorre todo el
+ * calendario acumulado hasta esa fecha, que es lo que mide el gráfico
+ * «Cuentas por secretaría»; con `rango` toma las cuotas que caen entre dos
+ * fechas exactas y con `anio`/`desde`/`hasta`, las de los meses elegidos.
+ * Cada cuota lleva su ventana de días (`inicio`–`fin`) para poder filtrarla.
+ */
+export function cuotasEnPeriodo(inicio, fin, corte, { anio, desde = 1, hasta = 12, rango } = {}) {
+    const cuotas = [];
+    if (!inicio || !fin || fin.getTime() < inicio.getTime() || corte.getTime() < inicio.getTime())
+        return cuotas;
+    const anioFiltro = Number(anio);
     const esperadas = mesesEsperados(inicio, fin);
-    let exigibles = 0;
-    for (let k = 0; k < esperadas; k++) {
+    for (let k = 0; k < esperadas && k < LIMITE_CUOTAS; k++) {
+        const periodo = plusMonths(inicio, k);
         const cierre = plusMonths(inicio, k + 1);
         cierre.setDate(cierre.getDate() - 1);
         const limite = cierre.getTime() > fin.getTime() ? fin : cierre;
         if (limite.getTime() > corte.getTime())
             break;
-        exigibles += 1;
+        const mes = periodo.getMonth() + 1;
+        if (rango) {
+            if (!solapaRango(periodo, limite, rango))
+                continue;
+        }
+        else {
+            if (Number.isFinite(anioFiltro) && periodo.getFullYear() !== anioFiltro)
+                continue;
+            if (mes < desde || mes > hasta)
+                continue;
+        }
+        cuotas.push({
+            indice: k,
+            anio: periodo.getFullYear(),
+            mes,
+            etiqueta: `${MESES[mes - 1]} ${periodo.getFullYear()}`,
+            inicio: periodo,
+            fin: limite,
+        });
     }
-    return exigibles;
+    return cuotas;
 }
 export function plusMonths(date, months) {
     const total = date.getMonth() + months;
@@ -115,8 +204,61 @@ export function mesesEsperados(inicio, fin) {
     const total = anios * 12 + meses + (dias > 0 ? 1 : 0);
     return Math.max(1, total);
 }
+function cubiertasScalar(contrato, calendario) {
+    const hasta = Math.min(Math.max(0, contrato.cuentasRegistradas ?? 0), calendario.length);
+    return new Set(calendario.slice(0, hasta).map((cuota) => cuota.indice));
+}
+/**
+ * Reparte las cuentas radicadas sobre el calendario real: cada una se para en la
+ * cuota cuyo vencimiento cubre su propio período (`fechaInicio`–`fechaFin`). Así
+ * el libro no escribe una cuenta de agosto en la fila de enero. Se recorre en el
+ * mismo orden de los períodos, por eso un solo puntero basta.
+ */
+export function emparejarCuentas(calendario, radicadas) {
+    const porCuota = new Map();
+    const sobrantes = [];
+    let puntero = 0;
+    for (const cuenta of radicadas) {
+        const desde = parseDateOnly(cuenta.fechaInicio);
+        const hasta = parseDateOnly(cuenta.fechaFin) ?? desde;
+        let asignada = null;
+        for (let i = puntero; i < calendario.length; i++) {
+            const cuota = calendario[i];
+            if (!desde || !hasta)
+                break;
+            if (cuota.fin.getTime() < desde.getTime())
+                continue;
+            if (cuota.inicio.getTime() > hasta.getTime())
+                break;
+            if (porCuota.has(cuota.indice))
+                continue;
+            asignada = cuota;
+            puntero = i;
+            break;
+        }
+        if (!asignada) {
+            sobrantes.push(cuenta);
+            continue;
+        }
+        porCuota.set(asignada.indice, cuenta);
+    }
+    return { porCuota, sobrantes };
+}
+/** Cuentas radicadas ordenadas como las entiende el backend: por período y luego por id. */
+export function cuentasRadicadas(contrato) {
+    return [...(contrato.cuentasDetalle ?? [])].sort((a, b) => String(a.fechaInicio ?? '').localeCompare(String(b.fechaInicio ?? '')) ||
+        (Number.isFinite(a.idInformeActividad) ? a.idInformeActividad : 0) - (Number.isFinite(b.idInformeActividad) ? b.idInformeActividad : 0));
+}
+/** Índices de cuota que ya tienen cuenta radicada; sin detalle real vale el conteo declarado. */
+export function cuentasCubiertas(contrato, calendario) {
+    if (!contrato.cuentasDetalle?.length)
+        return cubiertasScalar(contrato, calendario);
+    return new Set(emparejarCuentas(calendario, cuentasRadicadas(contrato)).porCuota.keys());
+}
 export function buildCuentasSecretaria(contratos, filtros, hoy = new Date()) {
-    const corte = cortePeriodo(filtros.anio, filtros.mes, startOfDay(hoy), filtros.mesHasta ?? null);
+    const inicioDia = startOfDay(hoy);
+    const rango = rangoFechas(filtros, inicioDia);
+    const corte = corteEfectivo(filtros, inicioDia);
     const mapa = new Map();
     let totalCompletadas = 0;
     let totalPendientes = 0;
@@ -125,17 +267,23 @@ export function buildCuentasSecretaria(contratos, filtros, hoy = new Date()) {
     let contratosEnPeriodo = 0;
     for (const contrato of contratos) {
         const label = dependenciaLabel(contrato);
-        if (filtros.secretaria && label !== filtros.secretaria)
+        if (!pasaSecretaria(label, filtros))
             continue;
-        const inicio = parseFechaContrato(contrato.fechaInicio);
-        const fin = parseFechaContrato(contrato.fechaFin);
+        const inicio = fechaContratoValida(contrato.fechaInicio);
+        const fin = fechaContratoValida(contrato.fechaFin);
         if (!inicio || !fin || fin.getTime() < inicio.getTime())
             continue;
-        const exigibles = cuentasExigiblesAlCorte(inicio, fin, corte);
-        if (exigibles <= 0)
+        const calendario = cuotasEnPeriodo(inicio, fin, corte);
+        if (calendario.length <= 0)
             continue;
-        const registradas = Math.max(0, contrato.cuentasRegistradas ?? 0);
-        const completadas = Math.min(registradas, exigibles);
+        const visibles = rango
+            ? calendario.filter((cuota) => solapaRango(cuota.inicio, cuota.fin, rango))
+            : calendario;
+        if (visibles.length <= 0)
+            continue;
+        const cubiertas = cuentasCubiertas(contrato, calendario);
+        const exigibles = visibles.length;
+        const completadas = visibles.reduce((sum, cuota) => sum + (cubiertas.has(cuota.indice) ? 1 : 0), 0);
         const pendientes = exigibles - completadas;
         const row = mapa.get(label) ?? {
             label,
@@ -165,7 +313,7 @@ export function buildCuentasSecretaria(contratos, filtros, hoy = new Date()) {
         b.completadas - a.completadas ||
         a.label.localeCompare(b.label, 'es'));
     let rows = ordenadas;
-    if (!filtros.secretaria && ordenadas.length > TOP_SECRETARIAS) {
+    if (seleccionSecretarias(filtros).length === 0 && ordenadas.length > TOP_SECRETARIAS) {
         const top = ordenadas.slice(0, TOP_SECRETARIAS);
         const resto = ordenadas.slice(TOP_SECRETARIAS);
         top.push({

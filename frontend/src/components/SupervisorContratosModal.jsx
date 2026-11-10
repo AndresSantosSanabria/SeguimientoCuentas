@@ -1,9 +1,11 @@
-import { AlertTriangle, ArrowUpRight, CheckCircle2, ChevronRight } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { AlertTriangle, ArrowUpRight, CheckCircle2, ChevronRight, Download } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { EstadoBadge } from '@/components/ui/EstadoBadge';
 import { Modal } from '@/components/ui/Modal';
+import { dependenciaLabel } from '@/lib/dependencias';
 import { cuentasAlDia, cuentasRepresadas } from '@/lib/supervisores';
+import { cuentasSupervisor, descargarSupervisorDetalleExcel } from '@/lib/supervisoresExcel';
 import { formatDate, formatNumber } from '@/lib/format';
 
 function Dato({ label, value, className = '' }) {
@@ -102,18 +104,45 @@ function DetalleContrato({ contrato }) {
 export function SupervisorContratosModal({ supervisor, onClose }) {
   const contratos = supervisor?.contratos ?? [];
   const [seleccionado, setSeleccionado] = useState(0);
+  const [exportando, setExportando] = useState(false);
+  const hoy = useMemo(() => new Date(), []);
+  const filasCuentas = useMemo(() => cuentasSupervisor(supervisor, hoy), [supervisor, hoy]);
   useEffect(() => setSeleccionado(0), [supervisor?.label]);
   const actual = contratos[Math.min(seleccionado, Math.max(0, contratos.length - 1))];
+
+  async function descargar() {
+    if (exportando || contratos.length === 0) return;
+    setExportando(true);
+    try {
+      await descargarSupervisorDetalleExcel(supervisor, new Date());
+    } finally {
+      setExportando(false);
+    }
+  }
+
   return (
     <Modal
       title={supervisor?.label ?? ''}
       subtitle={`${formatNumber(supervisor?.value ?? 0)} contratos · ${formatNumber(supervisor?.alDia ?? 0)} cuentas a tiempo · ${formatNumber(supervisor?.represadas ?? 0)} represadas`}
       onClose={onClose}
       className="modal-panel-ancha"
+      action={
+        <button
+          type="button"
+          className="btn btn-inverso"
+          onClick={descargar}
+          disabled={exportando || contratos.length === 0}
+          title="Excel con dos hojas: sus contratos asignados y una fila por cada cuota exigible a hoy (radicada o pendiente). No depende del rango de fechas de Analítica."
+        >
+          <Download />
+          {exportando ? 'Generando…' : 'Descargar Excel'}
+          <span className="btn-contador">{formatNumber(filasCuentas.length)}</span>
+        </button>
+      }
     >
       <div className="modal-supervisor">
         <div>
-          <p className="micro-label micro-label-encabezado">Contratistas asignados</p>
+          <p className="micro-label micro-label-encabezado">Contratos asignados</p>
           <ul className="modal-supervisor-lista">
             {contratos.map((contrato, index) => {
               const represadas = cuentasRepresadas(contrato);
@@ -126,9 +155,9 @@ export function SupervisorContratosModal({ supervisor, onClose }) {
                     className="fila-contratista"
                   >
                     <span className="fila-contratista-texto">
-                      <span className="fila-contratista-nombre">{contrato.contratista}</span>
+                      <span className="fila-contratista-nombre">{contrato.noContrato}</span>
                       <span className="fila-contratista-dep">
-                        {contrato.dependencia ?? 'Sin secretaría'}
+                        {contrato.contratista} · {dependenciaLabel(contrato)}
                       </span>
                     </span>
                     <span

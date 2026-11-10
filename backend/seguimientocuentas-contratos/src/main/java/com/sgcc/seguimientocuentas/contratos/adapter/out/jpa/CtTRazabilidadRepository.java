@@ -3,7 +3,6 @@ package com.sgcc.seguimientocuentas.contratos.adapter.out.jpa;
 import com.sgcc.seguimientocuentas.contratos.domain.model.CtTRazabilidad;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import java.util.List;
 
@@ -13,13 +12,17 @@ public interface CtTRazabilidadRepository extends JpaRepository<CtTRazabilidad, 
     boolean existsByNoContratoAndIdEstado(String noContrato, int idEstado);
     List<CtTRazabilidad> findByNoContratoOrderByFechaDesc(String noContrato);
 
+    /** Todas las trazas de un contrato, en el orden del recorrido (id ascendente). */
+    List<CtTRazabilidad> findByNoContratoOrderByIdAsc(String noContrato);
+
+    /** Última traza de cada contrato; la tabla es chica, así que se lee completa en vez de filtrar por lista. */
     @Query(value = "SELECT t.* FROM contratistas.ct_t_trazabilidad t " +
-           "INNER JOIN (SELECT no_contrato, MAX(id) as max_id FROM contratistas.ct_t_trazabilidad WHERE no_contrato IN :contratos GROUP BY no_contrato) sub " +
+           "INNER JOIN (SELECT no_contrato, MAX(id) as max_id FROM contratistas.ct_t_trazabilidad GROUP BY no_contrato) sub " +
            "ON t.id = sub.max_id", nativeQuery = true)
-    List<CtTRazabilidad> findUltimaPorContratos(@Param("contratos") List<String> contratos);
+    List<CtTRazabilidad> findUltimaDeTodos();
 
     @Query(value = "SELECT t.* FROM contratistas.ct_t_trazabilidad t " +
-           "WHERE t.no_contrato IN :contratos AND t.id_informe_actividad IS NOT NULL " +
+           "WHERE t.id_informe_actividad IS NOT NULL " +
            "ORDER BY t.no_contrato, t.id_informe_actividad, t.id", nativeQuery = true)
-    List<CtTRazabilidad> findPorInformeDeContratos(@Param("contratos") List<String> contratos);
+    List<CtTRazabilidad> findPorInformeDeTodos();
 }

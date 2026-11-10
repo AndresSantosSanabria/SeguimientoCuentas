@@ -13,12 +13,14 @@ public interface CtTContratoSapRepository extends JpaRepository<CtTContratoSap, 
 
     Optional<CtTContratoSap> findByNoContrato(String noContrato);
 
-    @Query(value = "SELECT x.id, x.no_contrato, x.contratista, x.dependencia, x.fecha_inicio, x.fecha_fin " +
-            "FROM (SELECT DISTINCT ON (upper(btrim(c.contratista))) " +
-            "              c.id, c.no_contrato, c.contratista, c.dependencia, c.fecha_inicio, c.fecha_fin " +
-            "      FROM contratacion.ct_t_contrato_sap c " +
-            "      WHERE c.no_contrato IS NOT NULL AND btrim(coalesce(c.contratista, '')) <> '' " +
-            "      ORDER BY upper(btrim(c.contratista)), c.fecha_inicio DESC NULLS LAST, c.id DESC) x " +
-            "ORDER BY x.fecha_inicio DESC NULLS LAST", nativeQuery = true)
+    /**
+     * Todos los contratos con contratista, del más reciente al más antiguo. El orden cierra por `id`
+     * para que dos contratos con la misma fecha de inicio no alternen posición entre reconstrucciones
+     * del caché, que publicaría un ETag distinto sin que cambió nada.
+     */
+    @Query(value = "SELECT c.id, c.no_contrato, c.contratista, c.dependencia, c.fecha_inicio, c.fecha_fin " +
+            "FROM contratacion.ct_t_contrato_sap c " +
+            "WHERE c.no_contrato IS NOT NULL AND btrim(coalesce(c.contratista, '')) <> '' " +
+            "ORDER BY c.fecha_inicio DESC NULLS LAST, c.id DESC", nativeQuery = true)
     List<ContratoResumenProyeccion> findContratosResumen();
 }

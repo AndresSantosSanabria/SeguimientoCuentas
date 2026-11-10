@@ -131,3 +131,18 @@ export function truncate(value, max) {
         return '—';
     return value.length > max ? `${value.slice(0, max - 1)}…` : value;
 }
+/** Minúsculas y sin tildes: es la forma comparable de cualquier texto que escribe el usuario. */
+export function normalizar(value) {
+    return String(value ?? '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim()
+        .toLowerCase();
+}
+/** Busca término dentro de varios campos a la vez; vacío = coincidencia. */
+export function coincideTexto(termino, ...campos) {
+    const busca = normalizar(termino);
+    if (!busca)
+        return true;
+    return campos.some((campo) => normalizar(campo).includes(busca));
+}

@@ -72,3 +72,25 @@ export function estadoLabel(id, fallback) {
         return fallback;
     return ESTADO_LABELS[id] ?? `Estado ${id}`;
 }
+/** Los grupos de sentido común que se usan para filtrar, sin listar los 19 estados. */
+export const ESTADO_GRUPOS = [
+    { valor: 'en-proceso', label: 'En proceso' },
+    { valor: 'devuelta', label: 'En devolución' },
+    { valor: 'rechazada', label: 'Rechazadas' },
+    { valor: 'aprobada', label: 'Aprobadas' },
+    { valor: 'sin-inicio', label: 'Sin iniciar' },
+];
+export function agruparEstado(id) {
+    if (id === null || id === undefined || id === 0)
+        return 'sin-inicio';
+    if (id === ESTADO_APROBADO)
+        return 'aprobada';
+    if (ESTADOS_RECHAZO.has(id))
+        return 'rechazada';
+    if (id === ESTADO_DEVOLUCION)
+        return 'devuelta';
+    return 'en-proceso';
+}
+export function coincideGrupoEstado(id, grupo) {
+    return !grupo || grupo === 'todos' || agruparEstado(id) === grupo;
+}

@@ -154,7 +154,7 @@ export function ContratosPage() {
       </div>);
     }
     return (<div className="pila-pagina">
-      <PageHeader eyebrow="Explorador" title="Contratos" description="Consulta el último contrato registrado por cada contratista. Filtra por estado, avance o alertas operativas." actions={<button type="button" className="btn btn-primary" onClick={handleExport} disabled={filtered.length === 0}>
+      <PageHeader eyebrow="Explorador" title="Contratos" description="Todos los contratos registrados, incluidos los ya cerrados. Filtra por estado, avance o alertas operativas." actions={<button type="button" className="btn btn-primary" onClick={handleExport} disabled={filtered.length === 0}>
             <Download/>
             Exportar CSV
             <span className="btn-contador">

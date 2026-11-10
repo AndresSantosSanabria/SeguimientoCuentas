@@ -1,4 +1,4 @@
-import { ArrowUpRight, ClipboardCheck, ClipboardList, Download, FileCheck2, Radio, RefreshCw, TrendingUp, Users, Wifi, WifiOff, } from 'lucide-react';
+import { ArrowUpRight, ClipboardCheck, ClipboardList, Download, FileCheck2, Radio, RefreshCw, Search, TrendingUp, Users, Wifi, WifiOff, } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ChartCard } from '@/components/charts/ChartCard';
@@ -14,12 +14,16 @@ import { EstadoBadge } from '@/components/ui/EstadoBadge';
 import { KpiCard } from '@/components/ui/KpiCard';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { ProgressBar } from '@/components/ui/ProgressBar';
+import { SelectorSecretarias } from '@/components/ui/SelectorSecretarias';
 import { ChartSkeleton, KpiSkeleton } from '@/components/ui/Skeletons';
 import { useCdc } from '@/hooks/useCdc';
 import { useContratos } from '@/hooks/useContratos';
 import { useContractAnalytics } from '@/hooks/useContractAnalytics';
-import { MESES, aniosDisponibles, buildCuentasSecretaria, cortePeriodo, periodoLabel, secretariasDisponibles, } from '@/lib/cuentasSecretaria';
-import { buildCuentasPendientesDetalle, descargarCuentasPendientesExcel } from '@/lib/cuentasExcel';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { MESES, aniosDisponibles, buildCuentasSecretaria, corteEfectivo, periodoFiltroLabel, secretariasDisponibles, } from '@/lib/cuentasSecretaria';
+import { ALCANCES, SITUACIONES, buildCuentasDetalle, descargarCuentasExcel } from '@/lib/cuentasExcel';
+import { ESTADO_GRUPOS } from '@/lib/estados';
+import { descargarSupervisoresExcel } from '@/lib/supervisoresExcel';
 import { buildContratosPorSupervisor } from '@/lib/supervisores';
 import { formatDate, formatDateTime, formatNumber, formatPercent, formatRelativeTime, truncate, } from '@/lib/format';
 const ETIQUETAS_ESTATUS = {
@@ -66,29 +70,52 @@ export function AnaliticaPage() {
     const [anio, setAnio] = useState(hoy.getFullYear());
     const [mes, setMes] = useState(hoy.getMonth() + 1);
     const [mesHasta, setMesHasta] = useState('');
+    const [desdeFecha, setDesdeFecha] = useState('');
+    const [hastaFecha, setHastaFecha] = useState('');
     const [exportando, setExportando] = useState(false);
-    const [secretaria, setSecretaria] = useState('');
+    const [exportandoSupervisor, setExportandoSupervisor] = useState(false);
+    const [secretarias, setSecretarias] = useState([]);
+    const [situacion, setSituacion] = useState('todas');
+    const [alcance, setAlcance] = useState('corte');
+    const [estadoGrupo, setEstadoGrupo] = useState('todos');
+    const [textoCuenta, setTextoCuenta] = useState('');
     const [soloDeuda, setSoloDeuda] = useState(true);
-    const [secretariaSupervisor, setSecretariaSupervisor] = useState('');
+    const [secretariasSupervisor, setSecretariasSupervisor] = useState([]);
+    const [busquedaSupervisor, setBusquedaSupervisor] = useState('');
     const [supervisorSeleccionado, setSupervisorSeleccionado] = useState(null);
+    const textoCuentaFiltrado = useDebouncedValue(textoCuenta.trim(), 250);
+    const supervisorFiltrado = useDebouncedValue(busquedaSupervisor.trim(), 250);
     const anios = useMemo(() => (data ? aniosDisponibles(data) : []), [data]);
     const opcionesAnio = useMemo(() => [...new Set([hoy.getFullYear(), ...anios])].sort((a, b) => b - a), [anios, hoy]);
     const opcionesSecretaria = useMemo(() => (data ? secretariasDisponibles(data) : []), [data]);
-    const cuentasSecretaria = useMemo(() => buildCuentasSecretaria(data ?? [], { anio, mes, mesHasta, secretaria, soloDeuda }, hoy), [data, anio, mes, mesHasta, secretaria, soloDeuda, hoy]);
-    const detalleCuentas = useMemo(() => (data ? buildCuentasPendientesDetalle(data, { anio, mes, mesHasta, secretaria }, hoy) : []), [data, anio, mes, mesHasta, secretaria, hoy]);
+    const rangoActivo = Boolean(desdeFecha || hastaFecha);
+    const filtrosCuentas = useMemo(() => ({ anio, mes, mesHasta, desdeFecha, hastaFecha, secretarias, situacion, alcance, estado: estadoGrupo, texto: textoCuentaFiltrado, }), [anio, mes, mesHasta, desdeFecha, hastaFecha, secretarias, situacion, alcance, estadoGrupo, textoCuentaFiltrado]);
+    const cuentasSecretaria = useMemo(() => buildCuentasSecretaria(data ?? [], { anio, mes, mesHasta, desdeFecha, hastaFecha, secretarias, soloDeuda }, hoy), [data, anio, mes, mesHasta, desdeFecha, hastaFecha, secretarias, soloDeuda, hoy]);
+    const detalleCuentas = useMemo(() => (data ? buildCuentasDetalle(data, filtrosCuentas, hoy) : []), [data, filtrosCuentas, hoy]);
     const descargarCuentas = async () => {
         if (!data || exportando || detalleCuentas.length === 0)
             return;
         setExportando(true);
         try {
-            await descargarCuentasPendientesExcel(data, { anio, mes, mesHasta, secretaria }, hoy);
+            await descargarCuentasExcel(data, filtrosCuentas, hoy);
         }
         finally {
             setExportando(false);
         }
     };
-    const contratosPorSupervisor = useMemo(() => buildContratosPorSupervisor(data ?? [], { secretaria: secretariaSupervisor }), [data, secretariaSupervisor]);
-    const corte = cortePeriodo(anio, mes, hoy, mesHasta);
+    const contratosPorSupervisor = useMemo(() => buildContratosPorSupervisor(data ?? [], { secretarias: secretariasSupervisor, busqueda: supervisorFiltrado }), [data, secretariasSupervisor, supervisorFiltrado]);
+    const descargarSupervisores = async () => {
+        if (exportandoSupervisor || contratosPorSupervisor.coincidencias.length === 0)
+            return;
+        setExportandoSupervisor(true);
+        try {
+            await descargarSupervisoresExcel(contratosPorSupervisor.coincidencias, new Date());
+        }
+        finally {
+            setExportandoSupervisor(false);
+        }
+    };
+    const corte = corteEfectivo(filtrosCuentas, hoy);
     const corteLabel = formatDate(`${corte.getFullYear()}-${String(corte.getMonth() + 1).padStart(2, '0')}-${String(corte.getDate()).padStart(2, '0')}`);
     const cambiosRecientes = useMemo(() => events.slice(0, 8), [events]);
     const contratosEnFlujo = useMemo(() => new Set(events.map((event) => event.contrato)).size, [events]);
@@ -228,7 +255,7 @@ export function AnaliticaPage() {
         </ChartCard>
 
         <ChartCard className="celda-col-grande" title="Cuentas por secretaría" subtitle="Completadas = informes registrados; pendientes = cuotas mensuales vencidas sin informe. Corte al período seleccionado, sin proyectar cuotas futuras." action={<CuentasLegend />} footer={<p className="pie-analitico">
-              <span className="pie-analitico-cifra">{periodoLabel(anio, mes, mesHasta)}</span> · corte
+              <span className="pie-analitico-cifra">{periodoFiltroLabel(filtrosCuentas, hoy)}</span> · corte
               al {corteLabel} · {formatNumber(cuentasSecretaria.totalCompletadas)} completadas ·{' '}
               {formatNumber(cuentasSecretaria.totalPendientes)} pendientes ·{' '}
               {formatNumber(cuentasSecretaria.contratosConDeuda)} contratos con deuda de{' '}
@@ -236,11 +263,29 @@ export function AnaliticaPage() {
             </p>}>
           <div className="pila-bloque">
             <div className="filtro-fila">
+              <label className="campo-filtro" title="Fecha inicial del rango de calendario; filtra por el período de la cuota con precisión de día.">
+                <span className="field-label-corto">
+                  Desde
+                </span>
+                <input type="date" className="input input-corto input-fecha" value={desdeFecha} onChange={(event) => setDesdeFecha(event.target.value)} aria-label="Filtrar cuotas desde la fecha"/>
+              </label>
+
+              <label className="campo-filtro" title="Fecha final del rango; también es la fecha de corte: solo cuentan como pendientes las cuotas ya vencidas a ese día.">
+                <span className="field-label-corto">
+                  Hasta (día)
+                </span>
+                <input type="date" className="input input-corto input-fecha" value={hastaFecha} onChange={(event) => setHastaFecha(event.target.value)} aria-label="Filtrar cuotas hasta la fecha"/>
+              </label>
+
+              {rangoActivo ? (<button type="button" className="btn btn-ghost btn-limpiar-rango" onClick={() => { setDesdeFecha(''); setHastaFecha(''); }} title="Quitar el rango de fechas y volver a los selectores de año y mes">
+                  Quitar rango
+                </button>) : null}
+
               <label className="campo-filtro">
                 <span className="field-label-corto">
                   Año
                 </span>
-                <select className="input input-corto input-anio" value={anio} onChange={(event) => setAnio(Number(event.target.value))} aria-label="Filtrar por año">
+                <select className="input input-corto input-anio" value={anio} onChange={(event) => setAnio(Number(event.target.value))} disabled={rangoActivo} aria-label="Filtrar por año">
                   {opcionesAnio.map((opcion) => (<option key={opcion} value={opcion}>
                       {opcion}
                     </option>))}
@@ -251,7 +296,7 @@ export function AnaliticaPage() {
                 <span className="field-label-corto">
                   Mes
                 </span>
-                <select className="input input-corto input-mes" value={String(mes)} onChange={(event) => setMes(event.target.value === 'todos' ? 'todos' : Number(event.target.value))} aria-label="Filtrar por mes">
+                <select className="input input-corto input-mes" value={String(mes)} onChange={(event) => setMes(event.target.value === 'todos' ? 'todos' : Number(event.target.value))} disabled={rangoActivo} aria-label="Filtrar por mes">
                   <option value="todos">Todos</option>
                   {MESES.map((nombre, index) => (<option key={nombre} value={index + 1}>
                       {nombre}
@@ -259,11 +304,11 @@ export function AnaliticaPage() {
                 </select>
               </label>
 
-              <label className="campo-filtro" title="Mes final del rango; déjalo en «—» para un solo mes (o el año completo si Mes = Todos)">
+              <label className="campo-filtro" title={rangoActivo ? 'Desactivado mientras el rango de fechas esté puesto' : 'Mes final del rango; déjalo en «—» para un solo mes (o el año completo si Mes = Todos)'}>
                 <span className="field-label-corto">
                   Hasta
                 </span>
-                <select className="input input-corto input-mes-hasta" value={String(mesHasta)} onChange={(event) => setMesHasta(event.target.value === '' ? '' : Number(event.target.value))} aria-label="Filtrar hasta el mes (rango opcional de meses)">
+                <select className="input input-corto input-mes-hasta" value={String(mesHasta)} onChange={(event) => setMesHasta(event.target.value === '' ? '' : Number(event.target.value))} disabled={rangoActivo} aria-label="Filtrar hasta el mes (rango opcional de meses)">
                   <option value="">—</option>
                   {MESES.map((nombre, index) => (<option key={nombre} value={index + 1}>
                       {nombre}
@@ -271,24 +316,58 @@ export function AnaliticaPage() {
                 </select>
               </label>
 
+              <SelectorSecretarias opciones={opcionesSecretaria} valor={secretarias} onChange={setSecretarias} etiqueta="Secretarías" />
+
               <label className="campo-filtro">
                 <span className="field-label-corto">
-                  Secretaría
+                  Situación
                 </span>
-                <select className="input input-corto input-secretaria" value={secretaria} onChange={(event) => setSecretaria(event.target.value)} aria-label="Filtrar por secretaría">
-                  <option value="">Todas</option>
-                  {opcionesSecretaria.map((opcion) => (<option key={opcion} value={opcion}>
-                      {opcion}
+                <select className="input input-corto input-situacion" value={situacion} onChange={(event) => setSituacion(event.target.value)} aria-label="Filtrar cuentas por situación">
+                  {SITUACIONES.map((opcion) => (<option key={opcion.valor} value={opcion.valor}>
+                      {opcion.label}
                     </option>))}
                 </select>
               </label>
 
-              <label className="campo-check">
+              <label className="campo-filtro" title={rangoActivo ? 'El rango de fechas ya define el alcance; desactivado mientras está puesto.' : 'Todo lo vencido hasta la fecha de corte reproduce el mismo total que mide el gráfico; el período solo toma las cuotas de los meses elegidos.'}>
+                <span className="field-label-corto">
+                  Alcance
+                </span>
+                <select className="input input-corto input-alcance" value={alcance} onChange={(event) => setAlcance(event.target.value)} disabled={rangoActivo} aria-label="Alcance del archivo Excel">
+                  {ALCANCES.map((opcion) => (<option key={opcion.valor} value={opcion.valor}>
+                      {opcion.label}
+                    </option>))}
+                </select>
+              </label>
+
+              <label className="campo-filtro">
+                <span className="field-label-corto">
+                  Estado del contrato
+                </span>
+                <select className="input input-corto input-grupo-estado" value={estadoGrupo} onChange={(event) => setEstadoGrupo(event.target.value)} aria-label="Filtrar por estado del contrato">
+                  <option value="todos">Todos</option>
+                  {ESTADO_GRUPOS.map((opcion) => (<option key={opcion.valor} value={opcion.valor}>
+                      {opcion.label}
+                    </option>))}
+                </select>
+              </label>
+
+              <label className="campo-filtro">
+                <span className="field-label-corto">
+                  Buscar contrato o supervisor
+                </span>
+                <span className="busqueda-listado">
+                  <Search className="input-icono"/>
+                  <input className="input input-corto input-con-icono" value={textoCuenta} onChange={(event) => setTextoCuenta(event.target.value)} placeholder="STD-CD-…" aria-label="Buscar por contrato, contratista o supervisor"/>
+                </span>
+              </label>
+
+              <label className="campo-check" title="Solo afecta al gráfico: oculta las secretarías sin cuentas pendientes.">
                 <input type="checkbox" className="campo-check-input" checked={soloDeuda} onChange={(event) => setSoloDeuda(event.target.checked)}/>
                 Solo con deuda
               </label>
 
-              <button type="button" className="btn btn-primary filtro-accion" onClick={descargarCuentas} disabled={exportando || detalleCuentas.length === 0} title="Descarga el detalle de cuentas pendientes (una fila por contrato y mes) filtrado por secretaría y rango de meses.">
+              <button type="button" className="btn btn-primary filtro-accion" onClick={descargarCuentas} disabled={exportando || detalleCuentas.length === 0} title="Excel con una fila por cuota del contrato: las radicadas con su período, estado y siguiente paso reales, y las pendientes sin radicar. Respeta secretarías, el rango de fechas (o el período en meses), situación, estado y búsqueda.">
                 <Download/>
                 {exportando ? 'Generando…' : 'Descargar Excel'}
                 <span className="btn-contador">
@@ -297,28 +376,26 @@ export function AnaliticaPage() {
               </button>
             </div>
 
+            {detalleCuentas.length > 8000 ? (<p className="nota-volumen">
+                Son {formatNumber(detalleCuentas.length)} filas, una por cuota {rangoActivo ? 'del rango de fechas' : alcance === 'corte' ? 'vencida hasta el corte' : 'del período elegido'}.
+                {rangoActivo
+                    ? ' Acorta «Desde» y «Hasta» o restringe la secretaría y el estado del contrato para un archivo más liviano.'
+                    : `${alcance === 'corte' ? ' Cambia el alcance a «Solo las cuotas del período» o' : ''} acota el mes, la secretaría o el estado del contrato para un archivo más liviano.`}
+                {detalleCuentas.length > 100000 ? ' Con este volumen el archivo puede tardar más de un minuto en armarse.' : ''}
+              </p>) : null}
+
             {cuentasSecretaria.rows.length > 0 ? (<CuentasSecretariaBars data={cuentasSecretaria.rows} height={Math.max(280, cuentasSecretaria.rows.length * 36 + 30)}/>) : (<div className="caja-vacia caja-vacia-alta">
                 <p className="caja-vacia-titulo">
                   Sin cuentas pendientes en el período
                 </p>
                 <p className="caja-vacia-detalle">
-                  Ajusta el año, el mes o la secretaría; también puedes desmarcar «Solo con deuda».
+                  Ajusta el rango de fechas, el año, el mes o la secretaría; también puedes desmarcar «Solo con deuda».
                 </p>
               </div>)}
           </div>
         </ChartCard>
 
-        <ChartCard className="celda-col-completa" title="Contratos por supervisor" subtitle="Carga de cada supervisor: se toma el de la última supervisión registrada en cada contrato. Selecciona una barra para ver sus contratistas y las cuentas a tiempo o represadas." action={<label className="campo-filtro">
-              <span className="field-label-corto">
-                Secretaría
-              </span>
-              <select className="input input-corto input-secretaria" value={secretariaSupervisor} onChange={(event) => setSecretariaSupervisor(event.target.value)} aria-label="Filtrar supervisores por secretaría">
-                <option value="">Todas</option>
-                {opcionesSecretaria.map((opcion) => (<option key={opcion} value={opcion}>
-                    {opcion}
-                  </option>))}
-              </select>
-            </label>} footer={<p className="pie-analitico">
+        <ChartCard className="celda-col-completa" title="Contratos por supervisor" subtitle="Carga de cada supervisor: se toma el de la última supervisión registrada en cada contrato. Selecciona una barra para ver sus contratos y las cuentas a tiempo o represadas." footer={<p className="pie-analitico">
               <span className="pie-analitico-cifra">
                 {formatNumber(contratosPorSupervisor.supervisores)}
               </span>{' '}
@@ -334,11 +411,38 @@ export function AnaliticaPage() {
                 {formatNumber(contratosPorSupervisor.represadas)}
               </span>{' '}
               represadas
+              {busquedaSupervisor.trim()
+                ? ` · ${formatNumber(contratosPorSupervisor.coincidencias.length)} coinciden con la búsqueda`
+                : ''}
               {contratosPorSupervisor.ocultos > 0
-                ? ` · se muestran los ${contratosPorSupervisor.rows.length} con más contratos`
+                ? ` · se dibujan los ${contratosPorSupervisor.rows.length} con más contratos`
                 : '.'}
             </p>}>
-          {contratosPorSupervisor.rows.length > 0 ? (<SupervisorBars data={contratosPorSupervisor.rows} height={Math.max(260, contratosPorSupervisor.rows.length * 32 + 40)} onSupervisorSelect={setSupervisorSeleccionado}/>) : (<EmptyState title="Sin supervisores asignados" description="Ningún contrato de esta secretaría tiene supervisor en su última supervisión registrada."/>) }
+          <div className="pila-bloque">
+            <div className="filtro-fila">
+              <label className="campo-filtro">
+                <span className="field-label-corto">
+                  Buscar supervisor
+                </span>
+                <span className="busqueda-listado">
+                  <Search className="input-icono"/>
+                  <input className="input input-corto input-con-icono" value={busquedaSupervisor} onChange={(event) => setBusquedaSupervisor(event.target.value)} placeholder="Nombre o apellido" aria-label="Buscar supervisor por nombre"/>
+                </span>
+              </label>
+
+              <SelectorSecretarias opciones={opcionesSecretaria} valor={secretariasSupervisor} onChange={setSecretariasSupervisor} etiqueta="Secretarías" />
+
+              <button type="button" className="btn btn-primary filtro-accion" onClick={descargarSupervisores} disabled={exportandoSupervisor || contratosPorSupervisor.coincidencias.length === 0} title="Excel con dos hojas: el resumen de todos los supervisores del filtro (no solo los del gráfico) y un renglón por cada contrato asignado.">
+                <Download/>
+                {exportandoSupervisor ? 'Generando…' : 'Descargar Excel'}
+                <span className="btn-contador">
+                  {formatNumber(contratosPorSupervisor.coincidencias.length)}
+                </span>
+              </button>
+            </div>
+
+            {contratosPorSupervisor.rows.length > 0 ? (<SupervisorBars data={contratosPorSupervisor.rows} height={Math.max(260, contratosPorSupervisor.rows.length * 32 + 40)} onSupervisorSelect={setSupervisorSeleccionado}/>) : (<EmptyState title={busquedaSupervisor.trim() ? 'Ningún supervisor coincide' : 'Sin supervisores asignados'} description={busquedaSupervisor.trim() ? 'Revisa la búsqueda o limpia el nombre para volver a ver toda la carga.' : 'Ningún contrato de estas secretarías tiene supervisor en su última supervisión registrada.'}/>)}
+          </div>
         </ChartCard>
       </div>
 

@@ -43,7 +43,7 @@ function SupervisorTooltip({ active, payload }) {
           ? `Tiene ${formatNumber(supervisor.represadas)} cuentas vencidas sin radicar`
           : 'Sin cuentas vencidas: todos al día'}
       </p>
-      <p className="tooltip-pista">Selecciona la barra para ver los contratistas.</p>
+      <p className="tooltip-pista">Selecciona la barra para ver sus contratos.</p>
     </div>
   );
 }

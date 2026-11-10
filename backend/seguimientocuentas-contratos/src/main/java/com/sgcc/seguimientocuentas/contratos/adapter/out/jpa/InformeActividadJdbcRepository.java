@@ -2,6 +2,7 @@ package com.sgcc.seguimientocuentas.contratos.adapter.out.jpa;
 
 import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.jdbc.core.RowMapper;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -52,18 +53,27 @@ public class InformeActividadJdbcRepository {
         return resultado;
     }
 
-    public List<InformeActividadRow> listarPorContratos(Collection<String> noContratos) {
-        if (noContratos == null || noContratos.isEmpty()) {
-            return List.of();
-        }
-
+    public List<InformeActividadRow> listarTodos() {
         return jdbc.query(
                 "SELECT i.id, i.no_contrato, i.no_informe, i.num_informe, i.fecha_inicio, i.fecha_fin, " +
                         "i.tipo_informe, i.requiere_secop, i.firmado " +
                         "FROM contratistas.ct_t_informe_actividades i " +
-                        "WHERE i.no_contrato IN (:contratos) " +
+                        "WHERE i.no_contrato IS NOT NULL " +
                         "ORDER BY i.no_contrato, i.id",
-                Map.of("contratos", noContratos),
+                new MapSqlParameterSource(),
+                INFORME_ROW_MAPPER
+        );
+    }
+
+    /** Cuentas de un solo contrato, para el contrato que el CDC menciona y todavia no esta en memoria. */
+    public List<InformeActividadRow> listarPorContrato(String noContrato) {
+        return jdbc.query(
+                "SELECT i.id, i.no_contrato, i.no_informe, i.num_informe, i.fecha_inicio, i.fecha_fin, " +
+                        "i.tipo_informe, i.requiere_secop, i.firmado " +
+                        "FROM contratistas.ct_t_informe_actividades i " +
+                        "WHERE i.no_contrato = :contrato " +
+                        "ORDER BY i.id",
+                Map.of("contrato", noContrato),
                 INFORME_ROW_MAPPER
         );
     }

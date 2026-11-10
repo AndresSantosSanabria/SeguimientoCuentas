@@ -1,27 +1,49 @@
-import { MESES, cortePeriodo, mesesEsperados, plusMonths, rangoMeses } from '@/lib/cuentasSecretaria';
+import { MESES, cuotaVisible, cuentasCubiertas, cuentasRadicadas, cuotasEnPeriodo, emparejarCuentas, fechaContratoValida, pasaSecretaria, rangoFechas, rangoMeses, corteEfectivo, seleccionSecretarias, solapaRango } from '@/lib/cuentasSecretaria';
 import { dependenciaLabel } from '@/lib/dependencias';
-import { estadoLabel } from '@/lib/estados';
-import { parseDateOnly, startOfDay } from '@/lib/format';
+import { coincideGrupoEstado, estadoLabel } from '@/lib/estados';
+import { coincideTexto, parseDateOnly, startOfDay } from '@/lib/format';
 
 export const CUENTAS_EXCEL_COLUMNAS = [
     'Secretaría',
     'No. contrato',
     'Contratista',
-    'Mes pendiente',
-    'Estado actual',
+    'Situación',
+    'Cuota (mes)',
+    'Período de la cuenta',
+    'Nº informe',
+    'Tipo de informe',
+    'Estado de la cuenta',
+    'Fecha del estado',
+    'Siguiente paso',
+    'Requiere SECOP',
+    'Firmada',
+    'Cuenta en curso',
     'Supervisor',
+    'Estado del contrato',
     'Fecha inicio',
     'Fecha fin',
-    'Cuentas exigibles al corte',
-    'Cuentas registradas',
+    'Cuotas vencidas',
+    'Cuentas radicadas',
     'Cuotas pendientes',
-    'Cuentas en mora',
+    'En mora al corte',
     'Avance %',
 ];
-const ANCHOS_COLUMNA = [26, 16, 30, 16, 28, 24, 12, 12, 15, 14, 14, 13, 9];
-const LIMITE_MESES = 2400;
+const ANCHOS_COLUMNA = [26, 16, 30, 22, 16, 26, 10, 18, 28, 14, 26, 11, 9, 12, 24, 28, 12, 12, 15, 11, 12, 10, 9];
+export const SITUACIONES = [
+    { valor: 'todas', label: 'Radicadas y pendientes' },
+    { valor: 'radicadas', label: 'Solo radicadas' },
+    { valor: 'pendientes', label: 'Solo pendientes' },
+];
+/** Hasta dónde llega el libro: solo el rango elegido o todo lo vencido hasta el corte. */
+export const ALCANCES = [
+    { valor: 'periodo', label: 'Solo las cuotas del período' },
+    { valor: 'corte', label: 'Todo lo vencido hasta el corte' },
+];
 function num(value) {
     return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+function si(value) {
+    return value ? 'Sí' : 'No';
 }
 function slug(texto) {
     return String(texto)
@@ -32,107 +54,215 @@ function slug(texto) {
         .replace(/^-+|-+$/g, '')
         .slice(0, 40);
 }
+function periodoCuenta(cuenta) {
+    if (!cuenta?.fechaInicio && !cuenta?.fechaFin)
+        return '—';
+    return `${cuenta.fechaInicio ?? '—'} a ${cuenta.fechaFin ?? '—'}`;
+}
+function cuotaDe(periodo) {
+    const anio = periodo.getFullYear();
+    const mes = periodo.getMonth() + 1;
+    return { anio, mes, etiqueta: `${MESES[mes - 1]} ${anio}` };
+}
+/** Una cuenta ya radicada solo entra al libro si su período cae en el periodo pedido. */
+function enRango(cuota, anio, desde, hasta) {
+    return cuota.anio === anio && cuota.mes >= desde && cuota.mes <= hasta;
+}
+/** Igual, para una cuenta sin cuota en el calendario: manda su propio período. */
+function cuentaEnFiltro(cuenta, filtro) {
+    const inicio = parseDateOnly(cuenta.fechaInicio);
+    if (!inicio)
+        return false;
+    if (filtro.rango)
+        return solapaRango(inicio, parseDateOnly(cuenta.fechaFin) ?? inicio, filtro.rango);
+    return enRango(cuotaDe(inicio), filtro.anio, filtro.desde, filtro.hasta);
+}
+function clave(cuota) {
+    return cuota.anio * 12 + cuota.mes;
+}
 /**
- * Detalle de cuentas pendientes: una fila por cada cuota exigible y no radicada
- * (contrato × mes) dentro del rango de meses seleccionado.
+ * Libro de cuentas: una fila por cuota vencida del contrato. Cada cuota lleva la
+ * cuenta radicada cuyo período la cubre (con su estado y siguiente paso reales,
+ * tal como los entrega /api/contratos); las que no tienen cuenta quedan como
+ * pendientes sin radicar.
  *
- * Criterio, igual que el gráfico de «Cuentas por secretaría»:
- *  - exigible: la cuota del mes k cerró su periodo antes del corte;
- *  - radicada: los primeros `cuentasRegistradas` meses se consideran cubiertos;
- *  - pendiente: exigible y con k >= cuentasRegistradas.
+ * El calendario lo calcula `cuotasEnPeriodo`, la misma función del gráfico
+ * «Cuentas por secretaría», siempre desde el inicio del contrato hasta el corte,
+ * que es lo que hace que radicadas + pendientes cuadren con la pantalla. El
+ * alcance solo decide qué cuotas se escriben: con rango de fechas entran las que
+ * caen entre las dos fechas elegidas —y el corte pasa a ser la segunda—; si no,
+ * los meses de Mes/Hasta o todo lo vencido hasta el corte. Las cuentas radicadas
+ * que no cubre ninguna cuota del calendario se listan al final como
+ * «fuera del calendario exigible».
  */
-export function buildCuentasPendientesDetalle(contratos, filtros, hoy = new Date()) {
-    const corte = cortePeriodo(filtros.anio, filtros.mes, startOfDay(hoy), filtros.mesHasta ?? null);
+export function buildCuentasDetalle(contratos, filtros, hoy = new Date()) {
+    const rango = rangoFechas(filtros, startOfDay(hoy));
+    const corte = corteEfectivo(filtros, startOfDay(hoy));
     const { desde, hasta } = rangoMeses(filtros.mes, filtros.mesHasta);
+    const enCorte = !rango && (filtros.alcance ?? 'periodo') === 'corte';
+    const situacion = filtros.situacion ?? 'todas';
+    const pideRadicadas = situacion !== 'pendientes';
+    const pidePendientes = situacion !== 'radicadas';
     const filas = [];
     for (const contrato of contratos) {
         const secretaria = dependenciaLabel(contrato);
-        if (filtros.secretaria && secretaria !== filtros.secretaria)
+        if (!pasaSecretaria(secretaria, filtros))
             continue;
-        const inicio = parseDateOnly(contrato.fechaInicio);
-        const fin = parseDateOnly(contrato.fechaFin);
+        if (!coincideGrupoEstado(contrato.idEstadoActual, filtros.estado))
+            continue;
+        if (!coincideTexto(filtros.texto, contrato.noContrato, contrato.contratista, contrato.supervisor))
+            continue;
+        const inicio = fechaContratoValida(contrato.fechaInicio);
+        const fin = fechaContratoValida(contrato.fechaFin);
         if (!inicio || !fin || fin.getTime() < inicio.getTime())
             continue;
-        const registradas = Math.max(0, num(contrato.cuentasRegistradas));
-        const periodosPendientes = [];
-        const esperadas = mesesEsperados(inicio, fin);
-        let exigibles = 0;
-        for (let k = 0; k < esperadas && k < LIMITE_MESES; k++) {
-            const periodo = plusMonths(inicio, k);
-            const cierre = plusMonths(inicio, k + 1);
-            cierre.setDate(cierre.getDate() - 1);
-            const limite = cierre.getTime() > fin.getTime() ? fin : cierre;
-            if (limite.getTime() > corte.getTime())
-                break;
-            exigibles += 1;
-            if (k >= registradas)
-                periodosPendientes.push(periodo);
-        }
-        if (exigibles === 0 || periodosPendientes.length === 0)
+        const cuotas = cuotasEnPeriodo(inicio, fin, corte);
+        const radicadas = cuentasRadicadas(contrato);
+        const { porCuota, sobrantes } = emparejarCuentas(cuotas, radicadas);
+        const cubiertas = cuentasCubiertas(contrato, cuotas);
+        const visibles = enCorte
+            ? cuotas
+            : cuotas.filter((cuota) => cuotaVisible(cuota, { anio: filtros.anio, desde, hasta, rango }));
+        if (visibles.length === 0 && radicadas.length === 0)
             continue;
-        const pendientesTotal = exigibles - Math.min(registradas, exigibles);
-        for (const periodo of periodosPendientes) {
-            const anioPeriodo = periodo.getFullYear();
-            const mesPeriodo = periodo.getMonth() + 1;
-            if (anioPeriodo !== filtros.anio || mesPeriodo < desde || mesPeriodo > hasta)
+        const pendientes = cuotas.length - cubiertas.size;
+        const contexto = [
+            secretaria,
+            contrato.noContrato,
+            contrato.contratista,
+        ];
+        const contadores = [
+            contrato.supervisor?.trim() || '—',
+            estadoLabel(contrato.idEstadoActual, contrato.estadoActual),
+            contrato.fechaInicio,
+            contrato.fechaFin,
+            cuotas.length,
+            num(contrato.cuentasRegistradas),
+            pendientes,
+            num(contrato.cuentasEnMora),
+            num(contrato.porcentajeAvance),
+        ];
+        visibles.forEach((cuota) => {
+            const cuenta = porCuota.get(cuota.indice) ?? null;
+            const radicada = cuenta || cubiertas.has(cuota.indice);
+            if (radicada && !pideRadicadas)
+                return;
+            if (!radicada && !pidePendientes)
+                return;
+            filas.push({
+                orden: clave(cuota) * 2,
+                valores: [
+                    ...contexto,
+                    cuenta ? 'Radicada' : radicada ? 'Radicada (sin detalle)' : 'Pendiente (sin radicar)',
+                    cuota.etiqueta,
+                    cuenta ? periodoCuenta(cuenta) : '— sin radicar —',
+                    cuenta ? (cuenta.numInforme ?? cuenta.noInforme ?? '—') : '—',
+                    cuenta ? (cuenta.tipoInforme ?? '—') : '—',
+                    cuenta ? estadoLabel(cuenta.idEstadoActual, cuenta.estadoActual) : 'No radicada',
+                    cuenta ? (cuenta.fechaEstado ?? '—') : '—',
+                    cuenta ? (cuenta.siguientePaso ?? '—') : 'Radicar informe de actividades',
+                    cuenta ? si(cuenta.requiereSecop) : '—',
+                    cuenta ? si(cuenta.firmado) : '—',
+                    cuenta?.activa ? 'En curso' : '—',
+                    ...contadores,
+                ],
+            });
+        });
+        if (!pideRadicadas)
+            continue;
+        for (const cuenta of sobrantes) {
+            const cuota = cuotaDe(parseDateOnly(cuenta.fechaInicio) ?? corte);
+            if (!enCorte && !cuentaEnFiltro(cuenta, { anio: filtros.anio, desde, hasta, rango }))
                 continue;
             filas.push({
-                orden: anioPeriodo * 12 + mesPeriodo,
+                orden: clave(cuota) * 2 + 1,
                 valores: [
-                    secretaria,
-                    contrato.noContrato,
-                    contrato.contratista,
-                    `${MESES[mesPeriodo - 1]} ${anioPeriodo}`,
-                    estadoLabel(contrato.idEstadoActual, contrato.estadoActual),
-                    contrato.supervisor?.trim() || '—',
-                    contrato.fechaInicio,
-                    contrato.fechaFin,
-                    exigibles,
-                    registradas,
-                    pendientesTotal,
-                    num(contrato.cuentasEnMora),
-                    num(contrato.porcentajeAvance),
+                    ...contexto,
+                    'Radicada (fuera del calendario exigible)',
+                    cuota.etiqueta,
+                    periodoCuenta(cuenta),
+                    cuenta.numInforme ?? cuenta.noInforme ?? '—',
+                    cuenta.tipoInforme ?? '—',
+                    estadoLabel(cuenta.idEstadoActual, cuenta.estadoActual),
+                    cuenta.fechaEstado ?? '—',
+                    cuenta.siguientePaso ?? '—',
+                    si(cuenta.requiereSecop),
+                    si(cuenta.firmado),
+                    cuenta.activa ? 'En curso' : '—',
+                    ...contadores,
                 ],
             });
         }
     }
-    filas.sort((a, b) => a.valores[0].localeCompare(b.valores[0], 'es') ||
+    filas.sort((a, b) => String(a.valores[0]).localeCompare(String(b.valores[0]), 'es') ||
         String(a.valores[1] ?? '').localeCompare(String(b.valores[1] ?? ''), 'es') ||
         a.orden - b.orden);
     return filas.map((fila) => fila.valores);
 }
-function nombreArchivo(filtros, hoy) {
+/** Nombre del archivo según los filtros aplicados, para que dos descargas no se pisen. */
+export function nombreArchivoCuentas(filtros, hoy = new Date()) {
+    const rango = rangoFechas(filtros, startOfDay(hoy));
     const { desde, hasta } = rangoMeses(filtros.mes, filtros.mesHasta);
-    const rango = `${filtros.anio}-${String(desde).padStart(2, '0')}-a-${filtros.anio}-${String(hasta).padStart(2, '0')}`;
-    const partes = ['cuentas-pendientes', rango];
-    if (filtros.secretaria)
-        partes.push(slug(filtros.secretaria));
+    const alcance = filtros.alcance ?? 'periodo';
+    const partes = [`cuentas-${filtros.situacion ?? 'todas'}`];
+    if (rango)
+        partes.push(`${filtros.desdeFecha || 'inicio'}-a-${filtros.hastaFecha || 'hoy'}`);
+    else partes.push(alcance === 'corte'
+        ? `hasta-${filtros.anio}-${String(hasta).padStart(2, '0')}`
+        : `${filtros.anio}-${String(desde).padStart(2, '0')}-a-${filtros.anio}-${String(hasta).padStart(2, '0')}`);
+    const seleccion = seleccionSecretarias(filtros);
+    if (seleccion.length === 1)
+        partes.push(slug(seleccion[0]));
+    else if (seleccion.length > 1)
+        partes.push(`${seleccion.length}-secretarias`);
+    if (filtros.estado && filtros.estado !== 'todos')
+        partes.push(filtros.estado);
     partes.push(new Date(hoy).toISOString().slice(0, 10));
     return `${partes.join('_')}.xlsx`;
 }
 /**
- * Construye el libro de SheetJS (hoja «Cuentas pendientes» con anchos de columna)
- * a partir de las filas ya calculadas. Recibe `utils` de la librería xlsx para
- * mantener la importación diferida (y poder validarlo en tests de Node).
+ * Filtro «todo lo vencido hasta hoy»: corte en el día, sin rango de fechas y sin
+ * recorte de secretaría, estado o texto. Es el que usan los export que no cuelgan
+ * de la barra de filtros de Analítica.
  */
-export function construirLibroCuentas(utils, filas) {
+export function filtrosCorte(hoy = new Date()) {
+    return {
+        anio: new Date(hoy).getFullYear(),
+        mes: 'todos',
+        mesHasta: '',
+        alcance: 'corte',
+        situacion: 'todas',
+        estado: 'todos',
+        texto: '',
+        secretarias: [],
+    };
+}
+/** Hoja «Cuentas» con anchos, lista para ir sola o dentro de otro libro. */
+export function hojaCuentas(utils, filas) {
     const hoja = utils.aoa_to_sheet([CUENTAS_EXCEL_COLUMNAS, ...filas]);
     hoja['!cols'] = CUENTAS_EXCEL_COLUMNAS.map((_, index) => ({ wch: ANCHOS_COLUMNA[index] ?? 16 }));
+    return hoja;
+}
+/**
+ * Construye el libro de SheetJS (hoja «Cuentas» con anchos de columna) a partir
+ * de las filas ya calculadas. Recibe `utils` de la librería para mantener la
+ * importación diferida y poder validarlo fuera del navegador.
+ */
+export function construirLibroCuentas(utils, filas) {
     const libro = utils.book_new();
-    utils.book_append_sheet(libro, hoja, 'Cuentas pendientes');
+    utils.book_append_sheet(libro, hojaCuentas(utils, filas), 'Cuentas');
     return libro;
 }
 /**
- * Genera y descarga el archivo .xlsx con SheetJS. La librería se importa de forma
- * diferida: solo se descarga si el usuario pulsa el botón.
+ * Genera y descarga el .xlsx con todas las cuentas del filtro. La librería se
+ * importa de forma diferida: solo se baja si el usuario pulsa el botón.
  * Devuelve el número de filas escritas (0 = nada que descargar).
  */
-export async function descargarCuentasPendientesExcel(contratos, filtros, hoy = new Date()) {
-    const filas = buildCuentasPendientesDetalle(contratos, filtros, hoy);
+export async function descargarCuentasExcel(contratos, filtros, hoy = new Date()) {
+    const filas = buildCuentasDetalle(contratos, filtros, hoy);
     if (filas.length === 0)
         return 0;
     const { utils, writeFileXLSX } = await import('xlsx');
-    const libro = construirLibroCuentas(utils, filas);
-    writeFileXLSX(libro, nombreArchivo(filtros, hoy));
+    writeFileXLSX(construirLibroCuentas(utils, filas), nombreArchivoCuentas(filtros, hoy));
     return filas.length;
 }

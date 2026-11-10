@@ -26,7 +26,8 @@ public class ContratoController {
 
     @GetMapping
     public ResponseEntity<byte[]> listarTodos(
-            @RequestHeader(value = HttpHeaders.IF_NONE_MATCH, required = false) String ifNoneMatch) {
+            @RequestHeader(value = HttpHeaders.IF_NONE_MATCH, required = false) String ifNoneMatch,
+            @RequestHeader(value = HttpHeaders.ACCEPT_ENCODING, required = false) String acceptEncoding) {
         ContratoResumenCache.Snapshot snapshot = resumenCache.obtener();
         CacheControl cacheControl = CacheControl.maxAge(Duration.ofSeconds(30))
                 .cachePublic()
@@ -36,19 +37,36 @@ public class ContratoController {
             return ResponseEntity.status(HttpStatus.NOT_MODIFIED)
                     .eTag(snapshot.etag())
                     .cacheControl(cacheControl)
+                    .varyBy(HttpHeaders.ACCEPT_ENCODING)
                     .build();
         }
 
-        return ResponseEntity.ok()
+        ResponseEntity.BodyBuilder respuesta = ResponseEntity.ok()
                 .eTag(snapshot.etag())
                 .cacheControl(cacheControl)
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(snapshot.body());
+                .varyBy(HttpHeaders.ACCEPT_ENCODING)
+                .contentType(MediaType.APPLICATION_JSON);
+
+        return aceptaGzip(acceptEncoding)
+                ? respuesta.header(HttpHeaders.CONTENT_ENCODING, "gzip").body(snapshot.bodyGzip())
+                : respuesta.body(snapshot.body());
     }
 
     @GetMapping("/{noContrato}")
     public String verProgreso(@PathVariable String noContrato) {
         return contratoApplicationService.obtenerProgreso(noContrato);
+    }
+
+    private static boolean aceptaGzip(String acceptEncoding) {
+        if (acceptEncoding == null) {
+            return false;
+        }
+        for (String token : acceptEncoding.split(",")) {
+            if (token.trim().split(";")[0].trim().equalsIgnoreCase("gzip")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static boolean coincide(String ifNoneMatch, String etag) {

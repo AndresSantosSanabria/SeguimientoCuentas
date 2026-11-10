@@ -1,83 +1,104 @@
 package com.sgcc.seguimientocuentas.contratos.application;
 
-import tools.jackson.databind.ObjectMapper;
-import com.sgcc.seguimientocuentas.common.dto.ContratoResumenDTO;
+import com.sgcc.seguimientocuentas.contratos.application.ContratoResumenIndex.Publicacion;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import tools.jackson.databind.ObjectMapper;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.time.LocalDate;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.zip.GZIPOutputStream;
 
 /**
- * Una sola ejecución de las consultas batch sirve a todos los usuarios: se reconstruye cuando un evento
- * CDC marca un cambio o cuando vence el TTL de seguridad.
+ * Serializa el indice en memoria y conserva el resultado mientras la version del indice no se mueva.
+ * No consulta la base: el TTL desaparecio, y una rafaga de eventos CDC produce una sola serializacion
+ * porque la publicacion se coalesce en una ventana configurable que se estira si serializar tarda.
+ * El gzip tambien se hace aqui, una vez por publicacion, para que nginx no comprima 30 MB por usuario.
  */
 @Service
 public class ContratoResumenCache {
 
-    public record Snapshot(byte[] body, String etag, long generadoEn, int marcaInvalidacion) {}
+    public record Snapshot(byte[] body, byte[] bodyGzip, String etag, long generadoEn, long version) {}
 
     private static final Logger log = LoggerFactory.getLogger(ContratoResumenCache.class);
 
-    private final ContratoApplicationService contratoApplicationService;
+    private final ContratoResumenIndex indice;
     private final ObjectMapper objectMapper;
-    private final long ttlMillis;
+    private final long ventanaPublicacionMillis;
 
     private final AtomicReference<Snapshot> actual = new AtomicReference<>();
-    private final AtomicInteger invalidaciones = new AtomicInteger();
     private final ReentrantLock lock = new ReentrantLock();
+    private volatile long proximaPublicacionPermitida;
 
-    public ContratoResumenCache(ContratoApplicationService contratoApplicationService,
+    public ContratoResumenCache(ContratoResumenIndex indice,
                                 ObjectMapper objectMapper,
-                                @Value("${contratos.resumen.ttl-ms:120000}") long ttlMillis) {
-        this.contratoApplicationService = contratoApplicationService;
+                                @Value("${contratos.resumen.publicar-ms:1000}") long ventanaPublicacionMillis) {
+        this.indice = indice;
         this.objectMapper = objectMapper;
-        this.ttlMillis = ttlMillis;
+        this.ventanaPublicacionMillis = ventanaPublicacionMillis;
     }
 
     public Snapshot obtener() {
+        indice.asegurarDia(LocalDate.now());
+
         Snapshot previa = actual.get();
-        if (previa != null && estaVigente(previa)) {
-            return previa;
-        }
         if (previa == null) {
             lock.lock();
-        } else if (!lock.tryLock()) {
+            try {
+                if (actual.get() == null) {
+                    publicar();
+                }
+                return actual.get();
+            } finally {
+                lock.unlock();
+            }
+        }
+
+        if (indice.version() <= previa.version() || System.currentTimeMillis() < proximaPublicacionPermitida) {
+            return previa;
+        }
+        if (!lock.tryLock()) {
             return previa;
         }
         try {
-            Snapshot s = actual.get();
-            return s != null && estaVigente(s) ? s : reconstruir();
+            if (indice.version() > actual.get().version()) {
+                publicar();
+            }
+            return actual.get();
         } finally {
             lock.unlock();
         }
     }
 
-    public void invalidar() {
-        invalidaciones.incrementAndGet();
-    }
-
-    private Snapshot reconstruir() {
+    private void publicar() {
         long inicio = System.currentTimeMillis();
-        int marca = invalidaciones.get();
-        List<ContratoResumenDTO> contratos = contratoApplicationService.listarContratosResumen();
-        byte[] body = objectMapper.writeValueAsBytes(contratos);
-        Snapshot nuevo = new Snapshot(body, etag(body), System.currentTimeMillis(), marca);
-        actual.set(nuevo);
-        log.info("Resumen reconstruido: {} contratos, {} KB, {} ms",
-                contratos.size(), body.length / 1024, System.currentTimeMillis() - inicio);
-        return nuevo;
+        Publicacion publicacion = indice.publicar();
+        byte[] body = objectMapper.writeValueAsBytes(publicacion.contratos());
+        byte[] bodyGzip = comprimir(body);
+        long duracion = System.currentTimeMillis() - inicio;
+        proximaPublicacionPermitida = System.currentTimeMillis() + Math.max(ventanaPublicacionMillis, duracion);
+        actual.set(new Snapshot(body, bodyGzip, etag(body), System.currentTimeMillis(), publicacion.version()));
+        log.info("Resumen publicado: {} contratos, {} KB ({} KB gzip), {} ms, version {}",
+                publicacion.contratos().size(), body.length / 1024, bodyGzip.length / 1024, duracion,
+                publicacion.version());
     }
 
-    private boolean estaVigente(Snapshot s) {
-        return s.marcaInvalidacion() == invalidaciones.get()
-                && System.currentTimeMillis() - s.generadoEn() < ttlMillis;
+    private static byte[] comprimir(byte[] body) {
+        ByteArrayOutputStream salida = new ByteArrayOutputStream(Math.max(1024, body.length / 10));
+        try (GZIPOutputStream gzip = new GZIPOutputStream(salida, 16 * 1024)) {
+            gzip.write(body);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+        return salida.toByteArray();
     }
 
     private static String etag(byte[] body) {

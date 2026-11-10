@@ -5,33 +5,30 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.sgcc.seguimientocuentas.cdc.adapter.in.CDCWebSocketHandler;
-import com.sgcc.seguimientocuentas.contratos.adapter.out.jpa.CtPEstadoRepository;
-import com.sgcc.seguimientocuentas.contratos.adapter.out.jpa.CtTContratoSapRepository;
-import com.sgcc.seguimientocuentas.contratos.application.ContratoResumenCache;
-import com.sgcc.seguimientocuentas.contratos.domain.model.CtPEstado;
-import com.sgcc.seguimientocuentas.contratos.domain.model.CtTContratoSap;
-import jakarta.annotation.PostConstruct;
+import com.sgcc.seguimientocuentas.common.dto.ContratoResumenDTO;
+import com.sgcc.seguimientocuentas.common.dto.CuentaDetalleDTO;
+import com.sgcc.seguimientocuentas.contratos.adapter.out.jpa.InformeActividadRow;
+import com.sgcc.seguimientocuentas.contratos.application.ContratoResumenIndex;
+import com.sgcc.seguimientocuentas.contratos.domain.model.FichaContrato;
+import com.sgcc.seguimientocuentas.contratos.domain.service.ContratoProgresoService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * CdcEventService - interpreta los eventos CDC y mantiene el estado en memoria de cada contrato.
+ * Traduce un evento de Debezium en un parche del indice en memoria.
  *
- * Los estados del workflow se leen de contratistas.ct_p_estado (19 estados en la base real
- * de supervisa). Si esa tabla no estuviera disponible, se usan los 19 estados por defecto.
- *
- * Los datos se guardan SOLO en memoria: al reiniciar la app el estado se reconstruye
- * con los eventos CDC que sigan llegando.
+ * El evento se interpreta por su operacion: `c`/`u`/`r` traen la fila nueva en payload.after y `d`
+ * trae la eliminada en payload.before, asi que una baja también llega al indice en vez de perderse.
+ * Aqui no se guarda estado propio: la ficha del contrato es la unica fuente de verdad, y el aviso
+ * por WebSocket se arma a partir de ella. Por eso no queda nada que reconciliar contra la base.
  */
 @Service
 public class CdcEventService {
@@ -42,458 +39,325 @@ public class CdcEventService {
     private static final int ESTADO_APROBADO = 19;
     private static final Set<Integer> ESTADOS_RECHAZO = Set.of(3, 8);
 
+    /** Curva de avance por estado, solo para el aviso en vivo: el payload oficial sale del indice. */
+    private static final Map<Integer, Integer> AVANCE_POR_ESTADO = Map.ofEntries(
+            Map.entry(1, 6), Map.entry(2, 12), Map.entry(3, 12), Map.entry(4, 18), Map.entry(5, 25),
+            Map.entry(6, 31), Map.entry(7, 37), Map.entry(8, 37), Map.entry(9, 43), Map.entry(10, 43),
+            Map.entry(11, 56), Map.entry(12, 62), Map.entry(13, 75), Map.entry(14, 81), Map.entry(15, 87),
+            Map.entry(16, 90), Map.entry(17, 93), Map.entry(18, 96), Map.entry(19, 100));
+
+    private enum Tabla {
+        MAESTRO("ct_t_contrato_sap"),
+        TRAZABILIDAD("ct_t_trazabilidad"),
+        INFORME("ct_t_informe_actividades"),
+        DOCUMENTO("ct_t_informe_documento"),
+        SUPERVISION("ct_t_supervision"),
+        FONDOS("ct_t_fondos"),
+        PAGO("ct_pago"),
+        ESTADOS("ct_p_estado"),
+        USUARIOS("t_usuarios");
+
+        private final String nombre;
+
+        Tabla(String nombre) {
+            this.nombre = nombre;
+        }
+
+        /** El destino de Debezium es prefijo.esquema.tabla: se reconoce por el nombre de la tabla. */
+        private static Tabla desde(String destino) {
+            for (Tabla tabla : values()) {
+                if (destino.contains(tabla.nombre)) {
+                    return tabla;
+                }
+            }
+            return null;
+        }
+    }
+
     private final ObjectMapper objectMapper;
     private final CDCWebSocketHandler webSocketHandler;
-    private final CtPEstadoRepository estadoRepository;
-    private final CtTContratoSapRepository contratoSapRepository;
-    private final ContratoResumenCache resumenCache;
-
-    private final Map<String, ObjectNode> estadoContratos = new ConcurrentHashMap<>();
-    private final Map<String, Map<Long, Integer>> contratosCuentas = new ConcurrentHashMap<>();
-    private final Map<Integer, String> estadosMap = new ConcurrentHashMap<>();
-    private final Map<Integer, String> siguientesPasosMap = new HashMap<>();
-    private final Map<Integer, Integer> avancePorEstado = new HashMap<>();
+    private final ContratoResumenIndex indice;
+    private final ContratoProgresoService progresoService;
 
     public CdcEventService(ObjectMapper objectMapper,
                            CDCWebSocketHandler webSocketHandler,
-                           CtPEstadoRepository estadoRepository,
-                           CtTContratoSapRepository contratoSapRepository,
-                           ContratoResumenCache resumenCache) {
+                           ContratoResumenIndex indice,
+                           ContratoProgresoService progresoService) {
         this.objectMapper = objectMapper;
         this.webSocketHandler = webSocketHandler;
-        this.estadoRepository = estadoRepository;
-        this.contratoSapRepository = contratoSapRepository;
-        this.resumenCache = resumenCache;
-    }
-
-    @PostConstruct
-    public void init() {
-        cargarAvances();
-        cargarSiguientesPasos();
-        cargarEstados();
-        log.info("CDC configurado con {} estados de contrato", estadosMap.size());
-    }
-
-    private void cargarAvances() {
-        avancePorEstado.put(1, 6);
-        avancePorEstado.put(2, 12);
-        avancePorEstado.put(3, 12);
-        avancePorEstado.put(4, 18);
-        avancePorEstado.put(5, 25);
-        avancePorEstado.put(6, 31);
-        avancePorEstado.put(7, 37);
-        avancePorEstado.put(8, 37);
-        avancePorEstado.put(9, 43);
-        avancePorEstado.put(10, 43);
-        avancePorEstado.put(11, 56);
-        avancePorEstado.put(12, 62);
-        avancePorEstado.put(13, 75);
-        avancePorEstado.put(14, 81);
-        avancePorEstado.put(15, 87);
-        avancePorEstado.put(16, 90);
-        avancePorEstado.put(17, 93);
-        avancePorEstado.put(18, 96);
-        avancePorEstado.put(19, 100);
-    }
-
-    private void cargarSiguientesPasos() {
-        siguientesPasosMap.put(1, "Enviar informe de actividades a revisión");
-        siguientesPasosMap.put(2, "Supervisor revisa y aprueba o rechaza");
-        siguientesPasosMap.put(3, "Contratista corrige y reenvía el informe");
-        siguientesPasosMap.put(4, "Firmar informe de actividades");
-        siguientesPasosMap.put(5, "Solicitar pantallas SECOP y firmar");
-        siguientesPasosMap.put(6, "Cargar pantallas SECOP");
-        siguientesPasosMap.put(7, "Supervisor aprueba o rechaza SECOP");
-        siguientesPasosMap.put(8, "Corregir pantallas SECOP");
-        siguientesPasosMap.put(9, "Registrar supervisión");
-        siguientesPasosMap.put(10, "Contratista corrige y reenvía el informe");
-        siguientesPasosMap.put(11, "Crear RAS");
-        siguientesPasosMap.put(12, "Enviar informe al enlace");
-        siguientesPasosMap.put(13, "Enviar informe al área jurídica");
-        siguientesPasosMap.put(14, "Enviar informe al usuario MM");
-        siguientesPasosMap.put(15, "Enviar informe al usuario FI");
-        siguientesPasosMap.put(16, "Enviar informe al ordenador del gasto");
-        siguientesPasosMap.put(17, "Enviar informe a tesorería");
-        siguientesPasosMap.put(18, "Aprobación final por tesorería");
-        siguientesPasosMap.put(19, "Proceso completado");
-    }
-
-    private void cargarEstados() {
-        try {
-            for (CtPEstado estado : estadoRepository.findAll()) {
-                if (estado.getId() != null && estado.getDescripcion() != null) {
-                    estadosMap.put(estado.getId(), estado.getDescripcion());
-                }
-            }
-        } catch (Exception e) {
-            log.warn("No se pudo leer ct_p_estado, se usan estados por defecto: {}", e.getMessage());
-        }
-
-        if (estadosMap.isEmpty()) {
-            estadosMap.put(1, "Registrando");
-            estadosMap.put(2, "En revisión");
-            estadosMap.put(3, "Rechazado");
-            estadosMap.put(4, "Aprobado pendiente firma");
-            estadosMap.put(5, "Aprobado pendiente firma y SECOP");
-            estadosMap.put(6, "Pendiente SECOP");
-            estadosMap.put(7, "En revisión SECOP");
-            estadosMap.put(8, "Rechazado SECOP");
-            estadosMap.put(9, "Aprobado");
-            estadosMap.put(10, "Informe devuelto al supervisor");
-            estadosMap.put(11, "Supervisión registrada");
-            estadosMap.put(12, "RAS registrado");
-            estadosMap.put(13, "Informe enviado a enlace");
-            estadosMap.put(14, "Informe enviado a abogado");
-            estadosMap.put(15, "Informe enviado a usuario MM");
-            estadosMap.put(16, "Informe enviado a usuario FI");
-            estadosMap.put(17, "Informe enviado a ordenador del gasto");
-            estadosMap.put(18, "Informe enviado a tesorería");
-            estadosMap.put(19, "Informe aprobado");
-        }
+        this.indice = indice;
+        this.progresoService = progresoService;
     }
 
     public void procesarEvento(String destination, String value) {
         try {
-            if (destination != null && destination.contains("heartbeat")) {
+            if (destination == null || value == null || destination.contains("heartbeat")) {
+                return;
+            }
+            JsonNode payload = objectMapper.readTree(value).path("payload");
+            String operacion = payload.path("op").asText("r");
+            boolean esBaja = "d".equals(operacion);
+
+            // En una baja la fila nueva no existe: payload.before es la que dice que se eliminó.
+            JsonNode fila = esBaja ? payload.path("before") : payload.path("after");
+            if (fila.isMissingNode() || fila.isNull()) {
                 return;
             }
 
-            if (value == null) {
+            Tabla tabla = Tabla.desde(destination);
+            if (tabla == null) {
+                return;
+            }
+            if (tabla == Tabla.ESTADOS || tabla == Tabla.USUARIOS) {
+                refrescarCatalogos(tabla);
                 return;
             }
 
-            JsonNode rootNode = objectMapper.readTree(value);
-            JsonNode afterNode = rootNode.path("payload").path("after");
-
-            // Un DELETE trae payload.after = null y por ahora no se refleja en el estado.
-            if (afterNode.isMissingNode() || afterNode.isNull()) {
+            String noContrato = esBaja ? null : resolverContrato(tabla, fila);
+            String afectado = aplicar(tabla, esBaja, noContrato, fila);
+            if (afectado == null) {
                 return;
             }
 
-            ObjectNode contenido = afterNode.deepCopy();
-            String tabla = destination != null ? destination : "desconocida";
-            String noContrato = extraerNoContrato(tabla, contenido);
-
-            if (noContrato == null || noContrato.isEmpty()) {
+            FichaContrato ficha = indice.buscar(afectado);
+            if (ficha == null) {
+                // Contrato fuera del resumen (sin contratista) o borrado: el indice ya lo dio de baja.
                 return;
             }
-
-            boolean actualizado = actualizarEstado(tabla, contenido, noContrato);
-            if (!actualizado) {
-                return;
-            }
-
-            log.info("CAMBIO DETECTADO - Contrato: {} - Tabla: {}", noContrato, tabla);
-            mostrarEstadoActual(noContrato);
-            notificarWebSocket(noContrato, tabla);
-            resumenCache.invalidar();
-
+            log.info("CDC {} {} en {} - estado {} ({}) - {} cuentas radicadas, {} en mora",
+                    operacion, afectado, tabla.nombre, ficha.dto().getIdEstadoActual(),
+                    ficha.dto().getEstadoActual(), ficha.dto().getCuentasRegistradas(),
+                    ficha.dto().getCuentasEnMora());
+            notificar(afectado, tabla, ficha, fila);
         } catch (Exception e) {
             log.error("Error procesando evento CDC", e);
         }
     }
 
-    private String extraerNoContrato(String tabla, ObjectNode contenido) {
-        if (tabla.contains("ct_t_trazabilidad")) {
-            return contenido.path("no_contrato").asText(null);
+    /** ct_pago no guarda no_contrato: su FK se resuelve con el indice, que ya tiene el mapeo id -> contrato. */
+    private String resolverContrato(Tabla tabla, JsonNode fila) {
+        if (tabla == Tabla.PAGO) {
+            long idContratoSap = fila.path("id_ct_t_contrato_sap").asLong(0);
+            return idContratoSap > 0 ? indice.contratoPorIdSap(idContratoSap) : null;
         }
-        if (tabla.contains("ct_t_supervision")) {
-            return contenido.path("no_contrato").asText(null);
-        }
-        if (tabla.contains("ct_t_fondos")) {
-            return contenido.path("no_contrato").asText(null);
-        }
-        if (tabla.contains("ct_t_informe_documento")) {
-            return contenido.path("no_contrato").asText(null);
-        }
-        if (tabla.contains("ct_t_informe_actividades")) {
-            return contenido.path("no_contrato").asText(null);
-        }
-        if (tabla.contains("ct_pago")) {
-            // ct_pago no guarda no_contrato: se resuelve por su FK id_ct_t_contrato_sap
-            long idContratoSap = contenido.path("id_ct_t_contrato_sap").asLong(0);
-            if (idContratoSap <= 0) {
-                return null;
-            }
-            return contratoSapRepository.findById(idContratoSap)
-                    .map(CtTContratoSap::getNoContrato)
-                    .orElse(null);
-        }
-        return null;
+        return texto(fila.path("no_contrato"));
     }
 
-    private boolean actualizarEstado(String tabla, ObjectNode contenido, String noContrato) {
-        ObjectNode estado = estadoContratos.computeIfAbsent(noContrato, k -> objectMapper.createObjectNode());
-
-        if (tabla.contains("ct_t_trazabilidad")) {
-            int idEstado = contenido.path("id_estado").asInt(0);
-            long idInformeActividad = contenido.path("id_informe_actividad").asLong(0);
-            String fecha = convertirTimestamp(contenido.path("fecha"));
-            String descripcion = contenido.path("descripcion").asText("");
-
-            estado.put("id_estado", idEstado);
-            estado.put("estado", nombreEstado(idEstado));
-            estado.put("fecha_estado", fecha);
-            estado.put("detalle_estado", descripcion);
-
-            boolean esDevolucion = idEstado == ESTADO_DEVOLUCION;
-            boolean esRechazo = ESTADOS_RECHAZO.contains(idEstado);
-            estado.put("es_devolucion", esDevolucion);
-            estado.put("es_rechazo", esRechazo);
-
-            if (esDevolucion || esRechazo) {
-                int pasoAnterior = estado.path("id_estado_anterior").asInt(0);
-                estado.put("paso_anterior", pasoAnterior);
-            } else {
-                estado.put("id_estado_anterior", idEstado);
+    /**
+     * Parchea el indice y dice que contrato resulto tocado.
+     *
+     * En una alta o actualizacion el nombre viene en la fila. En una baja no: la identidad de replica
+     * por defecto de estas tablas hace que payload.before solo entregue la clave primaria, asi que el
+     * indice es quien responde a que contrato pertenece esa clave.
+     *
+     * @return null cuando el evento no toca ningun contrato del resumen.
+     */
+    private String aplicar(Tabla tabla, boolean esBaja, String noContrato, JsonNode fila) {
+        long id = fila.path("id").asLong(0);
+        return switch (tabla) {
+            case MAESTRO -> esBaja
+                    ? indice.aplicarBajaMaestro(id)
+                    : aplicarMaestro(id, noContrato, fila);
+            case TRAZABILIDAD -> esBaja
+                    ? indice.aplicarBajaTrazabilidad(id)
+                    : aplicarTrazabilidad(id, noContrato, fila);
+            case INFORME -> esBaja
+                    ? indice.aplicarBajaInforme(id)
+                    : aplicarInforme(id, noContrato, fila);
+            // La agregacion de supervision (222.000 filas) no cabe en memoria: el contrato se anota y su
+            // ultimo registro se consulta una vez por ventana de publicacion. La baja escapa del mapeo
+            // porque la clave primaria no esta en ningun indice inverso; el proximo evento del contrato
+            // la refresca sola.
+            case SUPERVISION -> {
+                indice.anotarSupervision(noContrato);
+                yield esBaja ? null : noContrato;
             }
-
-            if (idInformeActividad > 0) {
-                Map<Long, Integer> cuentas = contratosCuentas.computeIfAbsent(
-                        noContrato, k -> new ConcurrentHashMap<>());
-                cuentas.put(idInformeActividad, idEstado);
-
-                int avanceIndividual = avanceEstado(idEstado);
-                estado.put("avance_individual", avanceIndividual);
-                estado.put("cuenta_cobro_actual", idInformeActividad);
-                estado.put("id_informe_actividad", idInformeActividad);
-
-                log.info("  Avance cuenta #{}: {}%", idInformeActividad, avanceIndividual);
-            }
-            return true;
-        }
-
-        if (tabla.contains("ct_t_supervision")) {
-            estado.put("ultima_supervision", contenido.path("no_supervision").asInt(0));
-            estado.put("porcentaje_avance", contenido.path("porcentaje_avance").asInt(0));
-            estado.put("en_firme", contenido.path("en_firme").asBoolean(false));
-            estado.put("valor_supervision", contenido.path("valor_pago").asDouble(0));
-            estado.put("riesgo_incumplimiento", contenido.path("riesgo_incumplimiento").asText(""));
-            estado.put("supervision_desde", convertirFechaDia(contenido.path("fecha_desde")));
-            estado.put("supervision_hasta", convertirFechaDia(contenido.path("fecha_hasta")));
-            if (contenido.hasNonNull("observacion")) {
-                estado.put("observacion_supervision", contenido.path("observacion").asText(""));
-            }
-            return true;
-        }
-
-        if (tabla.contains("ct_t_fondos")) {
-            estado.put("ras_creado", true);
-            estado.put("no_rpc", contenido.path("no_rpc").asLong(0));
-            estado.put("fondo", contenido.path("fondo").asText(""));
-            estado.put("nombre_fondo", contenido.path("nombre_fondo").asText(""));
-            estado.put("ultimo_fondo_valor_inicial", contenido.path("valor_inicial").asDouble(0));
-            estado.put("ultimo_fondo_saldo", contenido.path("saldo").asDouble(0));
-            estado.put("ultimo_fondo_valor_pagar", contenido.path("valor_pagar").asDouble(0));
-            return true;
-        }
-
-        if (tabla.contains("ct_t_informe_actividades")) {
-            long idInforme = contenido.path("id").asLong(0);
-            if (idInforme > 0) {
-                estado.put("id_informe_actividad", idInforme);
-            }
-            estado.put("no_informe", contenido.path("no_informe").asInt(0));
-            estado.put("num_informe", contenido.path("num_informe").asText(""));
-            estado.put("tipo_informe", contenido.path("tipo_informe").asText(""));
-            estado.put("informe_firmado", contenido.path("firmado").asBoolean(false));
-            estado.put("requiere_secop", contenido.path("requiere_secop").asBoolean(false));
-            estado.put("aplica_deduccion", contenido.path("aplica_deduccion").asBoolean(false));
-            estado.put("valor_informe", contenido.path("valor_pago").asDouble(0));
-            estado.put("informe_desde", convertirFechaDia(contenido.path("fecha_inicio")));
-            estado.put("informe_hasta", convertirFechaDia(contenido.path("fecha_fin")));
-            return true;
-        }
-
-        if (tabla.contains("ct_t_informe_documento")) {
-            estado.put("ultimo_documento", contenido.path("url_documento").asText(""));
-            estado.put("documento_comprimido", contenido.path("comprimido").asBoolean(false));
-            estado.put("fecha_ultimo_documento", convertirTimestamp(contenido.path("fecha_creacion")));
-            return true;
-        }
-
-        if (tabla.contains("ct_pago")) {
-            estado.put("tiene_pago", true);
-            estado.put("ultimo_pago_no", contenido.path("no_pago").asInt(0));
-            estado.put("ultima_factura", contenido.path("no_factura").asLong(0));
-            estado.put("ultimo_pago_valor", contenido.path("valor").asDouble(0));
-            estado.put("ultima_fecha_pago", convertirFechaDia(contenido.path("fecha_pago")));
-            return true;
-        }
-
-        return false;
+            // Documentos, RAS y pagos no alimentan el resumen; solo se anuncian en vivo.
+            default -> esBaja ? null : noContrato;
+        };
     }
 
-    private void mostrarEstadoActual(String noContrato) {
-        ObjectNode estado = estadoContratos.get(noContrato);
-        if (estado == null) {
-            log.info("  Estado: SIN DATOS");
-            return;
-        }
+    private String aplicarMaestro(long id, String noContrato, JsonNode fila) {
+        indice.aplicarMaestro(id, noContrato,
+                texto(fila.path("contratista")), texto(fila.path("dependencia")),
+                textoFecha(fila.path("fecha_inicio")), textoFecha(fila.path("fecha_fin")));
+        return noContrato;
+    }
 
-        log.info("--- ESTADO ACTUAL DEL CONTRATO ---");
-        log.info("  Contrato: {}", noContrato);
+    private String aplicarTrazabilidad(long id, String noContrato, JsonNode fila) {
+        indice.aplicarTrazabilidad(noContrato, id, fila.path("id_estado").asInt(0),
+                numeroLargo(fila.path("id_informe_actividad")), fecha(fila.path("fecha")),
+                texto(fila.path("descripcion")));
+        return noContrato;
+    }
 
-        if (estado.has("estado")) {
-            log.info("  Paso del proceso: {}", estado.path("estado").asText());
-        }
-        if (estado.has("detalle_estado") && !estado.path("detalle_estado").asText().isEmpty()) {
-            log.info("  Detalle: {}", estado.path("detalle_estado").asText());
-        }
-        if (estado.has("fecha_estado")) {
-            log.info("  Fecha: {}", estado.path("fecha_estado").asText());
-        }
-        if (estado.has("ultima_supervision")) {
-            log.info("  Ultima supervision: No. {}", estado.path("ultima_supervision").asInt());
-            log.info("  Avance supervision: {}%", estado.path("porcentaje_avance").asInt());
-        }
-        if (estado.path("ras_creado").asBoolean(false)) {
-            log.info("  RAS: CREADO");
-        }
+    private String aplicarInforme(long id, String noContrato, JsonNode fila) {
+        indice.aplicarInforme(new InformeActividadRow(
+                id,
+                noContrato,
+                fila.hasNonNull("no_informe") ? fila.path("no_informe").asInt() : null,
+                texto(fila.path("num_informe")),
+                dia(fila.path("fecha_inicio")),
+                dia(fila.path("fecha_fin")),
+                texto(fila.path("tipo_informe")),
+                fila.path("requiere_secop").asBoolean(false),
+                fila.path("firmado").asBoolean(false)));
+        return noContrato;
+    }
 
-        int idEstado = estado.path("id_estado").asInt(0);
-        String siguiente = siguientesPasosMap.get(idEstado);
-        if (siguiente != null) {
-            log.info("  Siguiente paso: {}", siguiente);
+    private void refrescarCatalogos(Tabla tabla) {
+        if (tabla == Tabla.ESTADOS) {
+            progresoService.recargarEstados();
+        } else {
+            progresoService.recargarSupervisores();
         }
+        indice.refrescarCatalogos();
+        log.info("Catalogo de {} recargado por CDC", tabla == Tabla.ESTADOS ? "estados" : "supervisores");
+    }
 
-        Map<Long, Integer> cuentas = contratosCuentas.get(noContrato);
-        if (cuentas != null && !cuentas.isEmpty()) {
-            log.info("  --- CUENTAS DE COBRO ---");
-            int sumaAvances = 0;
-            long cuentasPagadas = 0;
-            for (Map.Entry<Long, Integer> entry : cuentas.entrySet()) {
-                int avance = avanceEstado(entry.getValue());
-                log.info("  Cuenta #{}: {}% - {}", entry.getKey(), avance, nombreEstado(entry.getValue()));
-                sumaAvances += avance;
-                if (entry.getValue() == ESTADO_APROBADO) {
-                    cuentasPagadas++;
+    /**
+     * El aviso en vivo sale de la ficha ya parcheada, con los mismos nombres que espera el frontend.
+     * Nada de esto se guarda: es una foto del indice en el momento del evento.
+     */
+    private void notificar(String noContrato, Tabla tabla, FichaContrato ficha, JsonNode fila) {
+        try {
+            ContratoResumenDTO dto = ficha.dto();
+            ObjectNode estado = objectMapper.createObjectNode();
+            estado.put("id_estado", dto.getIdEstadoActual());
+            estado.put("estado", dto.getEstadoActual());
+            estado.put("detalle_estado", dto.getDescripcion());
+            estado.put("fecha_estado", dto.getFechaEstado());
+            estado.put("siguiente_paso", dto.getSiguientePaso());
+            estado.put("porcentaje_avance", dto.getAvanceDeclarado());
+            estado.put("ultima_supervision", dto.getTotalSupervisiones());
+            estado.put("cuentas_registradas", dto.getCuentasRegistradas());
+            estado.put("cuentas_en_mora", dto.getCuentasEnMora());
+            if (tabla == Tabla.SUPERVISION) {
+                estado.put("en_firme", fila.path("en_firme").asBoolean(false));
+            }
+            if (tabla == Tabla.TRAZABILIDAD) {
+                estado.put("es_devolucion", dto.getIdEstadoActual() == ESTADO_DEVOLUCION);
+                estado.put("es_rechazo", ESTADOS_RECHAZO.contains(dto.getIdEstadoActual()));
+                Integer anterior = pasoAnterior(dto);
+                if (anterior != null) {
+                    estado.put("paso_anterior", anterior);
                 }
             }
-            int avanceGeneral = sumaAvances / cuentas.size();
-            log.info("  Avance general contrato: {}% ({} de {} cuentas aprobadas)",
-                    avanceGeneral, cuentasPagadas, cuentas.size());
-            log.info("  ------------------------");
-        }
 
-        log.info("-----------------------------------");
-    }
-
-    private void notificarWebSocket(String noContrato, String tabla) {
-        try {
-            ObjectNode estado = estadoContratos.get(noContrato);
-            if (estado == null) {
-                return;
+            ArrayNode cuentas = estado.putArray("cuentas_cobro");
+            int sumaAvances = 0;
+            int aprobadas = 0;
+            for (CuentaDetalleDTO cuenta : dto.getCuentasDetalle()) {
+                ObjectNode nodo = cuentas.addObject();
+                nodo.put("id_informe_actividad", cuenta.getIdInformeActividad());
+                nodo.put("id_estado", cuenta.getIdEstadoActual());
+                nodo.put("estado", cuenta.getEstadoActual());
+                nodo.put("avance_individual", avanceEstado(cuenta.getIdEstadoActual()));
+                if (cuenta.isActiva()) {
+                    estado.put("cuenta_cobro_actual", cuenta.getIdInformeActividad());
+                }
+                sumaAvances += avanceEstado(cuenta.getIdEstadoActual());
+                if (cuenta.getIdEstadoActual() == ESTADO_APROBADO) {
+                    aprobadas++;
+                }
+            }
+            int total = dto.getCuentasDetalle().size();
+            if (total > 0) {
+                estado.put("avance_general_contrato", sumaAvances / total);
+                estado.put("total_cuentas_cobro", total);
+                estado.put("cuentas_aprobadas", aprobadas);
             }
 
             ObjectNode notificacion = objectMapper.createObjectNode();
             notificacion.put("tipo", "CAMBIO_DETECTADO");
             notificacion.put("contrato", noContrato);
-            notificacion.put("tabla", tabla);
+            notificacion.put("tabla", tabla.nombre);
             notificacion.put("timestamp", System.currentTimeMillis());
+            notificacion.set("estado", estado);
 
-            ObjectNode estadoCopia = estado.deepCopy();
-            notificacion.set("estado", estadoCopia);
-
-            int idEstado = estado.path("id_estado").asInt(0);
-            String siguiente = siguientesPasosMap.get(idEstado);
-            if (siguiente != null) {
-                estadoCopia.put("siguiente_paso", siguiente);
-            }
-
-            Map<Long, Integer> cuentas = contratosCuentas.get(noContrato);
-            if (cuentas != null && !cuentas.isEmpty()) {
-                ArrayNode arrayCuentas = objectMapper.createArrayNode();
-                int sumaAvances = 0;
-                int cuentasPagadas = 0;
-
-                for (Map.Entry<Long, Integer> entry : cuentas.entrySet()) {
-                    int avance = avanceEstado(entry.getValue());
-                    ObjectNode cuentaJson = objectMapper.createObjectNode();
-                    cuentaJson.put("id_informe_actividad", entry.getKey());
-                    cuentaJson.put("id_estado", entry.getValue());
-                    cuentaJson.put("estado", nombreEstado(entry.getValue()));
-                    cuentaJson.put("avance_individual", avance);
-                    arrayCuentas.add(cuentaJson);
-
-                    sumaAvances += avance;
-                    if (entry.getValue() == ESTADO_APROBADO) {
-                        cuentasPagadas++;
-                    }
-                }
-
-                estadoCopia.set("cuentas_cobro", arrayCuentas);
-                estadoCopia.put("avance_general_contrato", sumaAvances / cuentas.size());
-                estadoCopia.put("total_cuentas_cobro", cuentas.size());
-                estadoCopia.put("cuentas_aprobadas", cuentasPagadas);
-            }
-
-            String json = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(notificacion);
-            webSocketHandler.broadcast(json);
-
+            webSocketHandler.broadcast(objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(notificacion));
         } catch (Exception e) {
             log.error("Error notificando via WebSocket", e);
         }
     }
 
-    private String nombreEstado(int idEstado) {
-        return estadosMap.getOrDefault(idEstado, "Estado " + idEstado);
+    /** El paso previo al actual de la cuenta en curso, para marcar devoluciones y rechazos. */
+    private static Integer pasoAnterior(ContratoResumenDTO dto) {
+        return dto.getCuentasDetalle().stream()
+                .filter(CuentaDetalleDTO::isActiva)
+                .findFirst()
+                .map(cuenta -> cuenta.getPasos())
+                .filter(pasos -> pasos.size() >= 2)
+                .map(pasos -> pasos.get(pasos.size() - 2).getIdEstado())
+                .orElse(null);
     }
 
-    private int avanceEstado(int idEstado) {
-        return avancePorEstado.getOrDefault(idEstado, 0);
+    private static int avanceEstado(int idEstado) {
+        return AVANCE_POR_ESTADO.getOrDefault(idEstado, 0);
     }
 
-    /**
-     * Debezium entrega timestamp sin zona como microsegundos desde epoch.
-     * Si el valor ya viene como texto ISO se devuelve tal cual.
-     */
-    private String convertirTimestamp(JsonNode valor) {
-        if (valor == null || valor.isMissingNode() || valor.isNull()) {
-            return "";
-        }
-
-        long epoch = valor.isNumber() ? valor.asLong() : parsearNumero(valor.asText(""));
-
-        if (epoch == Long.MIN_VALUE) {
-            return valor.asText("");
-        }
-
-        long milisegundos = epoch > 100_000_000_000_000L ? epoch / 1000 : epoch;
-        DateTimeFormatter formatter = DateTimeFormatter
-                .ofPattern("yyyy-MM-dd HH:mm:ss")
-                .withZone(ZoneId.systemDefault());
-        return formatter.format(Instant.ofEpochMilli(milisegundos));
+    private static String texto(JsonNode nodo) {
+        return nodo == null || nodo.isNull() ? null : nodo.asText();
     }
 
-    /**
-     * Debezium entrega las columnas date como dias desde epoch.
-     */
-    private String convertirFechaDia(JsonNode valor) {
-        if (valor == null || valor.isMissingNode() || valor.isNull()) {
-            return "";
+    private static Long numeroLargo(JsonNode nodo) {
+        if (nodo == null || nodo.isNull() || nodo.asLong(0) <= 0) {
+            return null;
         }
-
-        if (valor.isNumber()) {
-            long dias = valor.asLong();
-            return Math.abs(dias) < 100_000
-                    ? LocalDate.ofEpochDay(dias).toString()
-                    : convertirTimestamp(valor);
-        }
-
-        String texto = valor.asText("");
-        long dias = parsearNumero(texto);
-        if (dias == Long.MIN_VALUE) {
-            return texto;
-        }
-        return Math.abs(dias) < 100_000 ? LocalDate.ofEpochDay(dias).toString() : convertirTimestamp(valor);
+        return nodo.asLong();
     }
 
-    private long parsearNumero(String texto) {
+    /** Las fechas de la tabla maestra son texto en la base; si vinieran como dia epoch se normaliza. */
+    private static String textoFecha(JsonNode nodo) {
+        if (nodo == null || nodo.isNull()) {
+            return null;
+        }
+        if (nodo.isNumber()) {
+            LocalDate fecha = dia(nodo);
+            return fecha != null ? fecha.toString() : nodo.asText();
+        }
+        String texto = nodo.asText();
+        return texto.isBlank() ? null : texto;
+    }
+
+    /** Debezium entrega las columnas date como dias desde el epoch. */
+    private static LocalDate dia(JsonNode nodo) {
+        if (nodo == null || nodo.isNull()) {
+            return null;
+        }
+        if (nodo.isNumber()) {
+            return LocalDate.ofEpochDay(nodo.asLong());
+        }
+        String texto = nodo.asText().trim();
+        if (texto.isEmpty()) {
+            return null;
+        }
         try {
-            return Long.parseLong(texto);
-        } catch (NumberFormatException e) {
-            return Long.MIN_VALUE;
+            return LocalDate.parse(texto.substring(0, Math.min(10, texto.length())));
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** Debezium entrega los timestamp sin zona como microsegundos desde el epoch. */
+    private static LocalDateTime fecha(JsonNode nodo) {
+        if (nodo == null || nodo.isNull()) {
+            return null;
+        }
+        if (nodo.isNumber()) {
+            long microsegundos = nodo.asLong();
+            Instant instant = Instant.ofEpochSecond(Math.floorDiv(microsegundos, 1_000_000L),
+                    Math.floorMod(microsegundos, 1_000_000L) * 1_000L);
+            return LocalDateTime.ofInstant(instant, ZoneId.systemDefault());
+        }
+        String texto = nodo.asText().trim();
+        if (texto.isEmpty()) {
+            return null;
+        }
+        try {
+            return LocalDateTime.parse(texto.length() > 19 ? texto.substring(0, 19) : texto);
+        } catch (Exception e) {
+            return null;
         }
     }
 }

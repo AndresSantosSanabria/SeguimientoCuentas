@@ -477,6 +477,24 @@
   margin-left: auto;
 }
 
+/* desactiva el rango de fechas y devuelve el control a Año/Mes/Hasta */
+.btn-limpiar-rango {
+  height: 2.25rem;
+  font-size: var(--size-xs);
+  line-height: var(--size-xs-lh);
+}
+
+/* aviso de tamaño del archivo cuando el filtro trae muchas cuotas */
+.nota-volumen {
+  border: 1px dashed var(--amber-300);
+  border-radius: var(--radius-lg);
+  background-color: var(--amber-50);
+  padding: 0.5rem 0.75rem;
+  font-size: var(--size-xs);
+  line-height: var(--size-xs-lh);
+  color: var(--amber-700);
+}
+
 .campo-check {
   display: inline-flex;
   height: 2.25rem;

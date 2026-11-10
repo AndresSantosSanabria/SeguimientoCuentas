@@ -30,8 +30,10 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "curl -fsSI http://127.0.0.1:8080/api/contratos >/dev/null || exit 1"]
       interval: 30s
-      timeout: 5s
-      retries: 3
+      # El HEAD del resumen paga la serializacion completa: en plena ventanada de CDC tarda
+      # segundos y con 5s el contenedor quedaba unhealthy sin estar caido.
+      timeout: 15s
+      retries: 5
       start_period: 120s
 
   frontend:

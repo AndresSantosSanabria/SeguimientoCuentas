@@ -1,7 +1,7 @@
 package com.sgcc.seguimientocuentas.cdc.adapter.in;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sgcc.seguimientocuentas.cdc.application.CdcEventService;
+import com.sgcc.seguimientocuentas.contratos.application.ContratoResumenIndex;
 import io.debezium.engine.DebeziumEngine;
 import io.debezium.engine.ChangeEvent;
 import io.debezium.engine.format.Json;
@@ -13,30 +13,16 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
 import java.util.Properties;
 
 /**
- * CDCListener - El "oido" del sistema en la base de datos.
+ * El oido del sistema sobre el WAL de PostgreSQL.
  *
- * Este clase es la puerta de entrada de todo el sistema CDC (Change Data Capture).
- * Su trabajo es simple pero critico: conectarse a PostgreSQL y escuchar en tiempo real
- * cada vez que alguien inserta, actualiza o elimina una fila en las tablas monitoreadas.
- *
- * Como funciona internamente:
- * 1. Al arrancar la app (@PostConstruct), arma la configuracion de Debezium con todos
- *    los parametros de conexion (host, puerto, usuario, tablas, etc.)
- * 2. Lanza un hilo daemon separado que ejecuta el motor Debezium. Se usa un hilo
- *    aparte para que si el motor CDC se caiga, la app principal siga funcionando.
- * 3. Debezium se conecta a PostgreSQL usando logical replication (no JDBC comun),
- *    lo que le permite leer el WAL (Write-Ahead Log) sin afectar el rendimiento.
- * 4. Cada vez que detecta un cambio en una fila, invoca el callback handleChangeEvent()
- *    que pasa el evento al CdcEventService para que lo procese.
- * 5. Al apagar la app (@PreDestroy), cierra el motor limpiamente.
- *
- * Requisito: PostgreSQL debe tener wal_level = logical para que esto funcione.
- *
- * Este componente es condicional: si en el properties se pone cdc.enabled=false,
- * esta clase no se crea y el CDC no arranca.
+ * El motor Debezium corre en su propio hilo daemon y se reinicia con espera creciente cada vez que
+ * cae. Antes de volver a escuchar recarga el indice desde la base: lo que paso mientras el motor
+ * estuvo fuera ya no lo trae el WAL, y asi el indice no necesita ninguna reconciliacion periodica.
+ * Requiere wal_level = logical. Se apaga con cdc.enabled=false.
  */
 @Component
 @ConditionalOnProperty(name = "cdc.enabled", havingValue = "true", matchIfMissing = true)
@@ -44,173 +30,199 @@ public class CDCListener {
 
     private static final Logger log = LoggerFactory.getLogger(CDCListener.class);
 
-    private final ObjectMapper objectMapper;
+    private static final long ESPERA_BASE_MS = 5_000;
+    private static final long ESPERA_MAXIMA_MS = 60_000;
+    private static final long CONEXION_ESTABLE_MS = 60_000;
+
     private final CdcEventService cdcEventService;
-
-    public CDCListener(ObjectMapper objectMapper, CdcEventService cdcEventService) {
-        this.objectMapper = objectMapper;
-        this.cdcEventService = cdcEventService;
-    }
-
-    // ========================================
-    // CONFIGURACION DE DEBEZIUM
-    // Todos estos valores vienen del application.properties con el prefijo debezium.*
-    // ========================================
+    private final ContratoResumenIndex indice;
 
     @Value("${debezium.database.hostname}")
-    private String hostname;  // Host donde corre PostgreSQL (ej: localhost)
+    private String hostname;
 
     @Value("${debezium.database.port}")
-    private String port;  // Puerto de PostgreSQL (ej: 5432)
+    private String port;
 
     @Value("${debezium.database.user}")
-    private String user;  // Usuario de PostgreSQL (necesita permisos de replication)
+    private String user;
 
     @Value("${debezium.database.password}")
-    private String password;  // Contrasena del usuario
+    private String password;
 
     @Value("${debezium.database.dbname}")
-    private String dbname;  // Nombre de la base de datos a monitorear (ej: supervisa)
+    private String dbname;
 
     @Value("${debezium.topic.prefix}")
-    private String topicPrefix;  // Prefijo para los topics internos de Kafka
+    private String topicPrefix;
 
     @Value("${debezium.slot.name}")
-    private String slotName;  // Nombre del slot de replicacion en PostgreSQL
+    private String slotName;
 
     @Value("${debezium.plugin.name}")
-    private String pluginName;  // Plugin de decodificacion WAL (pgoutput = nativo de PG10+)
+    private String pluginName;
 
     @Value("${debezium.schema.include.list}")
-    private String schemaList;  // Esquemas a monitorear (ej: contratistas,contratacion,ras)
+    private String schemaList;
 
     @Value("${debezium.table.include.list}")
-    private String tableList;  // Tablas especificas a monitorear (esquema.tabla)
+    private String tableList;
 
     @Value("${debezium.snapshot.mode}")
-    private String snapshotMode;  // Si tomar snapshot inicial (initial) o no (never)
+    private String snapshotMode;
 
     @Value("${debezium.heartbeat.interval.ms}")
-    private String heartbeatInterval;  // Intervalo de heartbeat para mantener viva la conexion
+    private String heartbeatInterval;
 
     @Value("${debezium.publication.autocreate.mode}")
-    private String publicationAutocreateMode;  // Como crear la publicacion PG (filtered)
+    private String publicationAutocreateMode;
 
     @Value("${debezium.engine.name}")
-    private String engineName;  // Nombre identificador del motor CDC
+    private String engineName;
 
     @Value("${debezium.connector.class}")
-    private String connectorClass;  // Clase Java del connector (PostgresConnector)
+    private String connectorClass;
 
     @Value("${debezium.bootstrap.servers}")
-    private String bootstrapServers;  // Servidores Kafka (para embedded engine)
+    private String bootstrapServers;
 
     @Value("${debezium.offset.storage.file.filename}")
-    private String offsetStorageFile;  // Archivo donde se guarda la posicion del WAL procesada
+    private String offsetStorageFile;
 
-    private DebeziumEngine<ChangeEvent<String, String>> engine;
+    private volatile DebeziumEngine<ChangeEvent<String, String>> engine;
+    private volatile boolean detenido;
+
+    public CDCListener(CdcEventService cdcEventService, ContratoResumenIndex indice) {
+        this.cdcEventService = cdcEventService;
+        this.indice = indice;
+    }
 
     /**
-     * Metodo que arranca el motor CDC al iniciar la aplicacion.
-     *
-     * Este metodo se ejecuta automaticamente gracias a @PostConstruct despues de que
-     * Spring inyecte todas las dependencias. Aqui es donde "despierta" el sistema CDC.
-     *
-     * Paso a paso:
-     * 1. Arma todas las propiedades de configuracion en un objeto Properties
-     * 2. Crea el motor Debezium en formato JSON con esas propiedades
-     * 3. Le indica que use handleChangeEvent() como callback para cada cambio
-     * 4. Lanza el motor en un hilo daemon (si el hilo muere, la app sigue viva)
-     * 5. Registra en el log que CDC esta listo escuchando
-     *
-     * Si algo falla, la app funciona normalmente pero sin CDC.
+     * El indice se lleno en su propio @PostConstruct, y Spring lo construye antes que a este bean
+     * porque depende de el: el motor nunca alcanza a parchear un indice vacio.
      */
     @PostConstruct
     public void start() {
-        try {
-            // Armar la configuracion del motor Debezium
-            Properties props = new Properties();
-            props.setProperty("name", engineName);
-            props.setProperty("connector.class", connectorClass);
-            props.setProperty("database.hostname", hostname);
-            props.setProperty("bootstrap.servers", bootstrapServers);
-            props.setProperty("offset.storage.file.filename", offsetStorageFile);
-            props.setProperty("database.port", port);
-            props.setProperty("database.user", user);
-            props.setProperty("database.password", password);
-            props.setProperty("database.dbname", dbname);
-            props.setProperty("topic.prefix", topicPrefix);
-            props.setProperty("slot.name", slotName);
-            props.setProperty("plugin.name", pluginName);
-            props.setProperty("schema.include.list", schemaList);
-            props.setProperty("table.include.list", tableList);
-            props.setProperty("snapshot.mode", snapshotMode);
-            props.setProperty("heartbeat.interval.ms", heartbeatInterval);
-            props.setProperty("publication.autocreate.mode", publicationAutocreateMode);
-            props.setProperty("errors.log.enable", "true");
-            props.setProperty("errors.tolerance", "all");
+        reportarCoberturaDeTablas();
+        Thread hilo = new Thread(this::escuchar, "contrato-cdc");
+        hilo.setDaemon(true);
+        hilo.start();
+    }
 
-            // Crear el motor Debezium con formato JSON
-            // .notifying() registra el metodo que se llamara con cada cambio detectado
-            engine = DebeziumEngine.create(Json.class)
-                    .using(props)
-                    .notifying(this::handleChangeEvent)
-                    .build();
-
-            // Lanzar el motor en un hilo daemon separado
-            // Daemon = si la app principal se cierra, este hilo se muere automaticamente
-            Thread cdcThread = new Thread(() -> {
-                try {
-                    engine.run();  // Este metodo bloquea y escucha cambios infinitamente
-                } catch (Exception e) {
-                    log.warn("CDC Engine se detuvo (la app sigue funcionando): {}", e.getMessage());
-                }
-            });
-            cdcThread.setDaemon(true);
-            cdcThread.start();
-
-            log.info("========================================");
-            log.info("CDC LISTENER INICIADO");
-            log.info("Host: {}:{}", hostname, port);
-            log.info("Database: {}", dbname);
-            log.info("Tablas: {}", tableList);
-            log.info("========================================");
-
-        } catch (Exception e) {
-            log.warn("No se pudo iniciar CDC (la app sigue funcionando): {}", e.getMessage());
+    private void escuchar() {
+        long espera = ESPERA_BASE_MS;
+        while (!detenido) {
+            long inicio = System.currentTimeMillis();
+            try {
+                engine = construirMotor();
+                log.info("Motor CDC en marcha: {}:{} / {}", hostname, port, dbname);
+                engine.run();
+            } catch (Exception e) {
+                log.warn("El motor CDC se detuvo: {}", e.getMessage());
+            } finally {
+                cerrarMotor();
+            }
+            if (detenido) {
+                return;
+            }
+            if (System.currentTimeMillis() - inicio > CONEXION_ESTABLE_MS) {
+                espera = ESPERA_BASE_MS;
+            }
+            if (!esperar(espera)) {
+                return;
+            }
+            espera = Math.min(espera * 2, ESPERA_MAXIMA_MS);
+            recargarIndice();
         }
     }
 
+    private boolean esperar(long millis) {
+        try {
+            Thread.sleep(millis);
+            return true;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
+    }
+
+    private void recargarIndice() {
+        try {
+            indice.cargar();
+            log.info("Indice recargado despues de la caida del CDC; el motor vuelve a escuchar desde el WAL");
+        } catch (Exception e) {
+            log.warn("No se pudo recargar el indice: {}", e.getMessage());
+        }
+    }
+
+    private DebeziumEngine<ChangeEvent<String, String>> construirMotor() {
+        Properties props = new Properties();
+        props.setProperty("name", engineName);
+        props.setProperty("connector.class", connectorClass);
+        props.setProperty("database.hostname", hostname);
+        props.setProperty("bootstrap.servers", bootstrapServers);
+        props.setProperty("offset.storage.file.filename", offsetStorageFile);
+        props.setProperty("database.port", port);
+        props.setProperty("database.user", user);
+        props.setProperty("database.password", password);
+        props.setProperty("database.dbname", dbname);
+        props.setProperty("topic.prefix", topicPrefix);
+        props.setProperty("slot.name", slotName);
+        props.setProperty("plugin.name", pluginName);
+        props.setProperty("schema.include.list", schemaList);
+        props.setProperty("table.include.list", tableList);
+        props.setProperty("snapshot.mode", snapshotMode);
+        props.setProperty("heartbeat.interval.ms", heartbeatInterval);
+        props.setProperty("publication.autocreate.mode", publicationAutocreateMode);
+        props.setProperty("errors.log.enable", "true");
+        props.setProperty("errors.tolerance", "all");
+
+        return DebeziumEngine.create(Json.class)
+                .using(props)
+                .notifying(this::handleChangeEvent)
+                .build();
+    }
+
     /**
-     * Callback que se ejecuta cada vez que Debezium detecta un cambio en la BD.
-     *
-     * El evento contiene:
-     * - destination(): el nombre del "topico" (ej: supervisa.contratistas.ct_t_trazabilidad)
-     * - value(): el JSON con el cambio (antes/despues de la fila modificada)
-     *
-     * Simplemente delega al CdcEventService para que haga el procesamiento.
+     * Lo que la proyeccion necesita frente a lo que Debezium trae: si falta una tabla, el indice se
+     * desfasaria en silencio, asi que se avisa apenas se enciende el motor.
      */
+    private void reportarCoberturaDeTablas() {
+        log.info("========================================");
+        log.info("CDC LISTENER INICIADO");
+        log.info("Tablas monitoreadas: {}", tableList);
+        List<String> faltantes = ContratoResumenIndex.tablasRequeridas().stream()
+                .filter(tabla -> !tableList.contains(tabla))
+                .toList();
+        if (faltantes.isEmpty()) {
+            log.info("Cobertura completa: las {} tablas que necesita la proyeccion estan en el log",
+                    ContratoResumenIndex.tablasRequeridas().size());
+        } else {
+            log.warn("Faltan en debezium.table.include.list (el indice no se enterara de estos cambios): {}",
+                    String.join(", ", faltantes));
+            log.warn("Agreguelas tambien a la publicacion: ALTER PUBLICATION dbz_publication ADD TABLE ...");
+        }
+        log.info("========================================");
+    }
+
     private void handleChangeEvent(ChangeEvent<String, String> recordChangeEvent) {
         cdcEventService.procesarEvento(recordChangeEvent.destination(), recordChangeEvent.value());
     }
 
-    /**
-     * Metodo que se ejecuta al apagar la aplicacion.
-     *
-     * Cierra limpiamente el motor Debezium para que:
-     * - Libere el slot de replicacion en PostgreSQL
-     * - Guarde la posicion actual del WAL en el archivo de offsets
-     * - No deje conexiones colgadas
-     */
-    @PreDestroy
-    public void stop() {
+    private void cerrarMotor() {
         if (engine != null) {
             try {
                 engine.close();
-                log.info("CDC Listener detenido");
             } catch (Exception e) {
-                log.error("Error al detener CDC Listener", e);
+                log.warn("Al cerrar el motor CDC: {}", e.getMessage());
             }
+            engine = null;
         }
+    }
+
+    @PreDestroy
+    public void stop() {
+        detenido = true;
+        cerrarMotor();
+        log.info("CDC Listener detenido");
     }
 }
