@@ -2,6 +2,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { useQueryClient } from '@tanstack/react-query';
 import { resolveCdcUrl } from '@/api/client';
 import { queryKeys } from '@/api/queryKeys';
+import { appConfig } from '@/config/env';
+import { getAccessTokenSync } from '@/utils/auth';
 const CdcContext = createContext(null);
 const MAX_EVENTS = 150;
 const MAX_RETRY_DELAY = 15_000;
@@ -209,13 +211,21 @@ export function CdcProvider({ children }) {
         let retry = 0;
         let retryTimer;
         let closedByEffect = false;
-        const url = resolveCdcUrl();
         const connect = () => {
             if (closedByEffect)
                 return;
+            // Aun no hay token (nadie ha iniciado sesion): no se conecta, solo
+            // reintenta. Evita martillar el backend con handshakes 401.
+            if (appConfig.enableAuth && !getAccessTokenSync()) {
+                setStatus('connecting');
+                scheduleReconnect();
+                return;
+            }
             setStatus('connecting');
             try {
-                socket = new WebSocket(url);
+                // La URL se resuelve en cada intento: el token puede haberse
+                // renovado (refresh_token) entre una reconexion y la siguiente.
+                socket = new WebSocket(resolveCdcUrl());
             }
             catch {
                 scheduleReconnect();
@@ -265,7 +275,8 @@ export function CdcProvider({ children }) {
     }, [generation, queryClient]);
     const clearEvents = useCallback(() => setEvents([]), []);
     const reconnect = useCallback(() => setGeneration((value) => value + 1), []);
-    const url = useMemo(() => resolveCdcUrl(), []);
+    // URL mostrada en pantalla (estado de conexion): sin el token de acceso.
+    const url = useMemo(() => resolveCdcUrl().replace(/\?token=[^&]*/, ''), []);
     const value = useMemo(() => ({
         status,
         url,

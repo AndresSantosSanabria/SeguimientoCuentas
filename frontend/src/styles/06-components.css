@@ -1561,6 +1561,39 @@
   color: var(--slate-500);
 }
 
+.buscador-supervisor {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-block: 0.5rem;
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-xl);
+  background: #fff;
+  padding: 0.5rem 0.75rem;
+  color: var(--slate-400);
+}
+
+.buscador-supervisor:focus-within {
+  border-color: var(--brand-500);
+  box-shadow: 0 0 0 3px var(--brand-500-a10);
+}
+
+.buscador-supervisor > svg {
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 auto;
+}
+
+.buscador-supervisor > input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--slate-800);
+  font-size: var(--size-xs);
+}
+
 .modal-supervisor-lista {
   max-height: 60vh;
   overflow-y: auto;

@@ -39,6 +39,10 @@
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
+  .kpi-cuadricula-cinco {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
   .kpi-cuadricula-seis {
     grid-template-columns: repeat(6, minmax(0, 1fr));
   }
@@ -685,4 +689,165 @@
   font-size: 11px;
   font-variant-numeric: tabular-nums;
   color: var(--slate-400);
+}
+
+/* ---- autenticación Keycloak ---- */
+.auth-callback,
+.auth-redirigiendo {
+  display: flex;
+  min-height: 55vh;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 2rem;
+  text-align: center;
+  color: var(--slate-600);
+}
+
+.auth-callback h2,
+.auth-redirigiendo p {
+  font-size: var(--size-lg);
+  line-height: var(--size-lg-lh);
+  color: var(--slate-700);
+}
+
+.auth-callback-error {
+  color: var(--rose-600) !important;
+}
+
+.auth-falta-config {
+  max-width: 44rem;
+  margin: 4rem auto;
+  padding: 2rem;
+  border: 1px solid var(--rose-200);
+  border-radius: var(--radius-xl);
+  background-color: var(--rose-50);
+  color: var(--slate-700);
+}
+
+.auth-falta-config h1 {
+  margin-block-end: 0.75rem;
+  font-size: var(--size-lg);
+  line-height: var(--size-lg-lh);
+  color: var(--rose-700);
+}
+
+.auth-falta-config code {
+  padding: 0.1rem 0.35rem;
+  border-radius: var(--radius-xl);
+  background-color: var(--white-a60);
+  font-size: 0.9em;
+}
+
+/* ============================================
+   CONFIGURACION . usuarios, roles y permisos
+   ============================================ */
+
+.config-tabs {
+  display: inline-flex;
+  gap: 0.35rem;
+  padding: 0.3rem;
+  border-radius: var(--radius-full);
+  background-color: var(--slate-100);
+}
+
+.config-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.5rem 1rem;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--slate-500);
+  font: inherit;
+  font-size: var(--size-sm);
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+  transition: background-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
+}
+
+.config-tab > svg {
+  width: 16px;
+  height: 16px;
+}
+
+.config-tab:hover {
+  color: var(--slate-900);
+}
+
+.config-tab[aria-selected='true'] {
+  background-color: var(--surface);
+  color: var(--brand-800);
+  box-shadow: var(--shadow-sm);
+}
+
+.config-tab:focus-visible {
+  outline: 2px solid var(--brand-500);
+  outline-offset: 2px;
+}
+
+.config-usuario {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.config-usuario-nombre {
+  color: var(--slate-900);
+  font-weight: var(--weight-semibold);
+}
+
+.config-usuario-correo {
+  color: var(--slate-500);
+  font-size: var(--size-xs);
+}
+
+.config-permiso-codigo {
+  color: var(--slate-500);
+  font-size: 0.6875rem;
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.05em;
+}
+
+.config-tenue {
+  color: var(--slate-500);
+}
+
+.config-grupo {
+  padding: 1rem 1.25rem 0.25rem;
+}
+
+.config-grupo + .config-grupo {
+  border-top: 1px solid var(--slate-100);
+}
+
+.config-grupo .micro-label {
+  margin-block-end: 0.5rem;
+}
+
+.config-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.config-permiso-fila:hover {
+  background-color: var(--slate-50);
+}
+
+@media (max-width: 640px) {
+  .config-tab {
+    padding: 0.45rem 0.7rem;
+  }
+
+  .config-tab > svg {
+    display: none;
+  }
+
+  .config-grupo {
+    padding-inline: 0.75rem;
+  }
 }

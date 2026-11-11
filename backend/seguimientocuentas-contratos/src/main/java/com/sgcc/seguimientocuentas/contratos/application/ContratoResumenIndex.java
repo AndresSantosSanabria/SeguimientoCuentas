@@ -1,8 +1,8 @@
 package com.sgcc.seguimientocuentas.contratos.application;
 
 import com.sgcc.seguimientocuentas.common.dto.ContratoResumenDTO;
+import com.sgcc.seguimientocuentas.accesos.domain.model.AmbitoUsuario;
 import com.sgcc.seguimientocuentas.contratos.adapter.out.jpa.InformeActividadRow;
-import com.sgcc.seguimientocuentas.contratos.adapter.out.jpa.SupervisionJdbcRepository.UltimaSupervision;
 import com.sgcc.seguimientocuentas.contratos.domain.model.Catalogos;
 import com.sgcc.seguimientocuentas.contratos.domain.model.FichaContrato;
 import com.sgcc.seguimientocuentas.contratos.domain.service.ContratoProgresoService;
@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -51,7 +52,6 @@ public class ContratoResumenIndex {
     private final Map<Long, String> contratosPorTraza = new ConcurrentHashMap<>();
     private final Map<Long, String> contratosPorInforme = new ConcurrentHashMap<>();
     private final Set<String> descartados = ConcurrentHashMap.newKeySet();
-    private final AtomicReference<Set<String>> supervisionPendiente = new AtomicReference<>(ConcurrentHashMap.newKeySet());
     private final AtomicReference<LocalDate> dia = new AtomicReference<>();
     private final AtomicLong version = new AtomicLong();
 
@@ -83,7 +83,6 @@ public class ContratoResumenIndex {
         contratosPorTraza.clear();
         contratosPorInforme.clear();
         descartados.clear();
-        supervisionPendiente.set(ConcurrentHashMap.newKeySet());
         for (FichaContrato ficha : cargadas) {
             indexar(ficha);
         }
@@ -131,6 +130,49 @@ public class ContratoResumenIndex {
         return fichas.get(noContrato);
     }
 
+    public BigDecimal valorTotal(String noContrato) {
+        FichaContrato ficha = fichas.get(noContrato);
+        return ficha == null ? null : ficha.valorTotal();
+    }
+
+    public List<ContratoResumenDTO> contratosDelSupervisor(long idSupervisor) {
+        return fichas.values().stream()
+                .filter(ficha -> ficha.idSupervisorActual() != null && ficha.idSupervisorActual() == idSupervisor)
+                .map(FichaContrato::dto)
+                .sorted(ORDEN_PUBLICACION)
+                .toList();
+    }
+
+    public List<ContratoSupervisorDTO> contratosCruzadosDeSecretarias(Set<String> secretarias) {
+        Set<String> normalizadas = secretarias.stream().map(AmbitoUsuario::normalizar)
+                .filter(java.util.Objects::nonNull).collect(java.util.stream.Collectors.toSet());
+        Set<Long> supervisoresLocales = fichas.values().stream()
+                .filter(f -> normalizadas.contains(AmbitoUsuario.normalizar(f.dto().getDependencia())))
+                .map(FichaContrato::idSupervisorActual).filter(java.util.Objects::nonNull)
+                .collect(java.util.stream.Collectors.toSet());
+        return fichas.values().stream()
+                .filter(f -> f.idSupervisorActual() != null && supervisoresLocales.contains(f.idSupervisorActual()))
+                .filter(f -> !normalizadas.contains(AmbitoUsuario.normalizar(f.dto().getDependencia())))
+                .map(f -> new ContratoSupervisorDTO(f.dto().getSupervisor(), f.dto()))
+                .toList();
+    }
+
+    public boolean supervisadoPorEquipoSecretarias(String noContrato, Set<String> secretarias) {
+        FichaContrato objetivo = fichas.get(noContrato);
+        if (objetivo == null || objetivo.idSupervisorActual() == null) return false;
+        Long idSupervisor = objetivo.idSupervisorActual();
+        return fichas.values().stream().anyMatch(f -> idSupervisor.equals(f.idSupervisorActual())
+                && secretarias.stream().map(AmbitoUsuario::normalizar).anyMatch(s ->
+                java.util.Objects.equals(s, AmbitoUsuario.normalizar(f.dto().getDependencia()))));
+    }
+
+    public record ContratoSupervisorDTO(String supervisor, ContratoResumenDTO contrato) {}
+
+    public boolean supervisadoPor(String noContrato, long idSupervisor) {
+        FichaContrato ficha = fichas.get(noContrato);
+        return ficha != null && ficha.idSupervisorActual() != null && ficha.idSupervisorActual() == idSupervisor;
+    }
+
     /** Los nombres de estado y de supervisor cambian por su cuenta; el CDC avisa cuando ocurre. */
     public void refrescarCatalogos() {
         catalogos = progresoService.catalogos();
@@ -143,7 +185,6 @@ public class ContratoResumenIndex {
      */
     public Publicacion publicar() {
         asegurarDia(LocalDate.now());
-        refrescarSupervisionesPendientes();
         long versionPublicada = version.get();
         List<ContratoResumenDTO> contratos = new ArrayList<>(fichas.size());
         for (FichaContrato ficha : fichas.values()) {
@@ -155,7 +196,7 @@ public class ContratoResumenIndex {
 
     /** Alta o actualizacion de contratacion.ct_t_contrato_sap: el evento trae la fila maestra completa. */
     public void aplicarMaestro(long id, String noContrato, String contratista, String dependencia,
-                               String fechaInicio, String fechaFin) {
+                               String fechaInicio, String fechaFin, BigDecimal valorTotal) {
         if (noContrato == null || noContrato.isBlank()) {
             return;
         }
@@ -169,10 +210,12 @@ public class ContratoResumenIndex {
 
         FichaContrato ficha = fichas.get(noContrato);
         if (ficha == null) {
-            indexar(new FichaContrato(id, noContrato, contratista, dependencia, fechaInicio, fechaFin));
+            FichaContrato nueva = new FichaContrato(id, noContrato, contratista, dependencia, fechaInicio, fechaFin);
+            nueva.actualizarMaestro(contratista, dependencia, fechaInicio, fechaFin, valorTotal);
+            indexar(nueva);
         } else {
             synchronized (ficha) {
-                ficha.actualizarMaestro(contratista, dependencia, fechaInicio, fechaFin);
+                ficha.actualizarMaestro(contratista, dependencia, fechaInicio, fechaFin, valorTotal);
             }
             recalcular(ficha);
         }
@@ -248,11 +291,15 @@ public class ContratoResumenIndex {
      * La supervision no se puede derivar en memoria, asi que el evento solo anota el contrato. La consulta
      * puntual se hace al publicar, agrupando todos los anotados en la misma ventana.
      */
-    public void anotarSupervision(String noContrato) {
-        if (asegurarFicha(noContrato) == null) {
+    public void aplicarEventoSupervision(String noContrato, boolean alta, boolean baja, Short avance, Long supervisor) {
+        FichaContrato ficha = asegurarFicha(noContrato);
+        if (ficha == null) {
             return;
         }
-        supervisionPendiente.get().add(noContrato);
+        synchronized (ficha) {
+            ficha.aplicarEventoSupervision(alta, baja, avance, supervisor);
+        }
+        recalcular(ficha);
         version.incrementAndGet();
     }
 
@@ -274,32 +321,6 @@ public class ContratoResumenIndex {
         }
         version.incrementAndGet();
         log.info("Dia {} en el indice: exigibles y mora recalculados en memoria", hoy);
-    }
-
-    private void refrescarSupervisionesPendientes() {
-        Set<String> pendientes = supervisionPendiente.getAndSet(ConcurrentHashMap.newKeySet());
-        if (pendientes.isEmpty()) {
-            return;
-        }
-        try {
-            Map<String, UltimaSupervision> supervisiones = progresoService.refrescarSupervisiones(pendientes);
-            Catalogos catalogo = catalogos;
-            LocalDate hoy = hoy();
-            for (String noContrato : pendientes) {
-                FichaContrato ficha = fichas.get(noContrato);
-                UltimaSupervision supervision = supervisiones.get(noContrato);
-                if (ficha == null || supervision == null) {
-                    continue;
-                }
-                synchronized (ficha) {
-                    ficha.setSupervision(supervision.total(), supervision.porcentajeAvance(), supervision.idSupervisor());
-                    ficha.recalcular(catalogo, hoy);
-                }
-            }
-        } catch (Exception e) {
-            supervisionPendiente.get().addAll(pendientes);
-            log.warn("No se pudo refrescar la supervision de {} contratos: {}", pendientes.size(), e.getMessage());
-        }
     }
 
     /** Contrato que el CDC menciona y todavia no esta: una carga puntual chica, o una vez, o ninguna. */
@@ -340,7 +361,6 @@ public class ContratoResumenIndex {
     private void darDeBaja(String noContrato) {
         FichaContrato ficha = fichas.remove(noContrato);
         contratosPorId.values().remove(noContrato);
-        supervisionPendiente.get().remove(noContrato);
         if (ficha == null) {
             return;
         }

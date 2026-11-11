@@ -1,8 +1,12 @@
 package com.sgcc.seguimientocuentas.cdc.adapter.in;
 
+import com.sgcc.seguimientocuentas.accesos.application.SesionService;
+import com.sgcc.seguimientocuentas.accesos.domain.model.AmbitoUsuario;
+import com.sgcc.seguimientocuentas.contratos.adapter.out.jpa.SupervisorJdbcRepository;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
@@ -11,6 +15,7 @@ import org.springframework.web.socket.handler.ConcurrentWebSocketSessionDecorato
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -66,8 +71,20 @@ public class CDCWebSocketHandler extends TextWebSocketHandler {
     /**
      * Sesiones activas envueltas en un decorator, para que nunca escriban dos hilos en la misma.
      * La clave es el id de sesion porque el decorator no preserva equals() de la sesion original.
+     * Cada sesion guarda su alcance: quien no tiene permiso para esa secretaria no recibe el aviso.
      */
-    private final Map<String, WebSocketSession> sesiones = new ConcurrentHashMap<>();
+    private final Map<String, Conexion> sesiones = new ConcurrentHashMap<>();
+
+    private final SesionService sesionService;
+    private final SupervisorJdbcRepository supervisorRepository;
+
+    public CDCWebSocketHandler(SesionService sesionService, SupervisorJdbcRepository supervisorRepository) {
+        this.sesionService = sesionService;
+        this.supervisorRepository = supervisorRepository;
+    }
+
+    /** Una conexion viva: la sesion que recibe los avisos y lo que puede ver esa persona. */
+    private record Conexion(WebSocketSession sesion, AmbitoUsuario ambito, Set<String> contratosPermitidos) {}
 
     /** Un cliente que se rezaga no puede bloquear al unico hilo de reparto: cierra y reconecta. */
     private static final int LIMITE_ESPERA_MS = 10_000;
@@ -102,12 +119,29 @@ public class CDCWebSocketHandler extends TextWebSocketHandler {
 
     /**
      * Se ejecuta cuando un cliente se conecta al WebSocket.
-     * Simplemente lo agrega a la lista de sesiones activas.
+     * Se guarda la sesion con el alcance de esa persona: el token viaja en el handshake, asi que
+     * aqui ya se sabe a que secretarias puede ver.
      */
     @Override
     public void afterConnectionEstablished(WebSocketSession session) {
-        sesiones.put(session.getId(),
-                new ConcurrentWebSocketSessionDecorator(session, LIMITE_ESPERA_MS, LIMITE_BUFFER_BYTES));
+        Object token = session.getAttributes().get("jwt");
+        AmbitoUsuario ambito = sesionService.alcanceDeConexion(token instanceof Jwt jwt ? jwt : null);
+        if ("ENLACE".equals(ambito.rolCodigo())) {
+            ambito = ambito.conSecretarias(supervisorRepository.secretariasPorCorreo(ambito.correo()));
+        }
+        Set<String> contratosPermitidos = "BASICO".equals(ambito.rolCodigo())
+                ? supervisorRepository.contratosPorCorreo(ambito.correo()) : Set.of();
+        if (!ambito.puede("TIEMPO_REAL_VER")) {
+            try {
+                session.close(CloseStatus.POLICY_VIOLATION);
+            } catch (Exception ignored) {
+                // La conexión se descarta aunque el cliente ya haya cerrado el socket.
+            }
+            return;
+        }
+        sesiones.put(session.getId(), new Conexion(
+                new ConcurrentWebSocketSessionDecorator(session, LIMITE_ESPERA_MS, LIMITE_BUFFER_BYTES),
+                ambito, contratosPermitidos));
         log.info("WebSocket CDC conectado - Sesion: {} - Clientes activos: {}",
                 session.getId(), sesiones.size());
     }
@@ -135,7 +169,7 @@ public class CDCWebSocketHandler extends TextWebSocketHandler {
     }
 
     /**
-     * Encola el aviso para TODOS los clientes conectados por WebSocket.
+     * Encola el aviso para los clientes que pueden ver esa secretaria.
      *
      * Lo llama CdcEventService despues de parchear el indice y vuelve enseguida:
      * el reparto lo hace el hilo de difusion, no el hilo del evento CDC.
@@ -144,17 +178,26 @@ public class CDCWebSocketHandler extends TextWebSocketHandler {
      * se elimina silenciosamente sin afectar a los demas clientes.
      *
      * @param json mensaje JSON a enviar (formato de texto)
+     * @param dependencia secretaria del contrato del que trata el aviso
      */
-    public void broadcast(String json) {
+    public void broadcast(String json, String dependencia, String contratista, String noContrato) {
         if (sesiones.isEmpty()) {
             return;  // No hay clientes conectados, no enviar nada
         }
-        difusion.execute(() -> repartir(new TextMessage(json)));
+        difusion.execute(() -> repartir(new TextMessage(json), dependencia, contratista, noContrato));
     }
 
-    private void repartir(TextMessage mensaje) {
-        for (Map.Entry<String, WebSocketSession> entrada : sesiones.entrySet()) {
-            WebSocketSession sesion = entrada.getValue();
+    private void repartir(TextMessage mensaje, String dependencia, String contratista, String noContrato) {
+        for (Map.Entry<String, Conexion> entrada : sesiones.entrySet()) {
+            Conexion conexion = entrada.getValue();
+            boolean basico = "BASICO".equals(conexion.ambito().rolCodigo());
+            boolean puedeVerContrato = basico
+                    ? conexion.contratosPermitidos().contains(noContrato)
+                    : conexion.ambito().veContrato(contratista, dependencia);
+            if (!puedeVerContrato) {
+                continue;
+            }
+            WebSocketSession sesion = conexion.sesion();
             try {
                 if (sesion.isOpen()) {
                     sesion.sendMessage(mensaje);

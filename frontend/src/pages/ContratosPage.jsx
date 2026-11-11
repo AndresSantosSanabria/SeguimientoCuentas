@@ -9,6 +9,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Pagination } from '@/components/ui/Pagination';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { TableSkeleton } from '@/components/ui/Skeletons';
+import { useAuth } from '@/context/AuthContext';
 import { useContratos } from '@/hooks/useContratos';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { ALERTA_OPTIONS, AVANCE_OPTIONS, ORDEN_OPTIONS, compareContratos, isAlertaFiltro, isAvanceFiltro, isOrdenFiltro, matchesAlerta, matchesAvance, } from '@/lib/contratosFilters';
@@ -18,6 +19,7 @@ import { formatDate, formatNumber, truncate } from '@/lib/format';
 const PAGE_SIZE = 20;
 export function ContratosPage() {
     const { data, isLoading, isError, refetch } = useContratos();
+    const { puede } = useAuth();
     const navigate = useNavigate();
     const [searchParams, setSearchParams] = useSearchParams();
     const qParam = searchParams.get('q') ?? '';
@@ -141,26 +143,20 @@ export function ContratosPage() {
             contrato.siguientePaso,
         ]));
     };
-    if (isLoading) {
-        return (<div className="pila-pagina-amplia">
-        <PageHeader eyebrow="Explorador" title="Contratos" description="Cargando el listado de contratos…"/>
-        <TableSkeleton rows={10}/>
-      </div>);
-    }
-    if (isError || !data) {
-        return (<div className="pila-pagina-amplia">
-        <PageHeader eyebrow="Explorador" title="Contratos"/>
-        <ErrorState onRetry={() => refetch()}/>
-      </div>);
-    }
-    return (<div className="pila-pagina">
-      <PageHeader eyebrow="Explorador" title="Contratos" description="Todos los contratos registrados, incluidos los ya cerrados. Filtra por estado, avance o alertas operativas." actions={<button type="button" className="btn btn-primary" onClick={handleExport} disabled={filtered.length === 0}>
+    const cuerpo = isLoading ? (<div className="pila-pagina-amplia">
+      <PageHeader eyebrow="Explorador" title="Contratos" description="Cargando el listado de contratos…"/>
+      <TableSkeleton rows={10}/>
+    </div>) : isError || !data ? (<div className="pila-pagina-amplia">
+      <PageHeader eyebrow="Explorador" title="Contratos"/>
+      <ErrorState onRetry={() => refetch()}/>
+    </div>) : (<div className="pila-pagina">
+      <PageHeader eyebrow="Explorador" title="Contratos" description="Todos los contratos registrados, incluidos los ya cerrados. Filtra por estado, avance o alertas operativas." actions={puede('CONTRATOS_EXPORTAR') ? (<button type="button" className="btn btn-primary" onClick={handleExport} disabled={filtered.length === 0}>
             <Download/>
             Exportar CSV
             <span className="btn-contador">
               {formatNumber(filtered.length)}
             </span>
-          </button>}/>
+          </button>) : null}/>
 
       <Card>
         <div className="filtros-grid">
@@ -306,4 +302,5 @@ export function ContratosPage() {
           </>)}
       </Card>
     </div>);
+    return cuerpo;
 }

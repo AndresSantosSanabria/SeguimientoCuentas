@@ -5,3 +5,11 @@ export function fetchContratos() {
 export function fetchReporteContrato(noContrato) {
     return getText(`/api/contratos/${encodeURIComponent(noContrato)}`);
 }
+
+export function fetchValorContrato(noContrato) {
+    return getJson(`/api/contratos/${encodeURIComponent(noContrato)}/valor`);
+}
+
+export function fetchContratosSupervisados() {
+    return getJson('/api/contratos/supervisados');
+}

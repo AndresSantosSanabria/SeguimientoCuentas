@@ -16,4 +16,6 @@ public interface ContratoResumenProyeccion {
     String getFechaInicio();
 
     String getFechaFin();
+
+    java.math.BigDecimal getValorTotal();
 }

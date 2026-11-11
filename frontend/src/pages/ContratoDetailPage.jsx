@@ -1,4 +1,4 @@
-import { Activity, ArrowLeft, Check, ClipboardCheck, Copy, FileText, TrendingUp, } from 'lucide-react';
+import { Activity, ArrowLeft, Check, ClipboardCheck, Copy, DollarSign, FileText, TrendingUp, } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Badge } from '@/components/ui/Badge';
@@ -13,11 +13,16 @@ import { ProgressBar } from '@/components/ui/ProgressBar';
 import { TableSkeleton } from '@/components/ui/Skeletons';
 import { useCdc } from '@/hooks/useCdc';
 import { useContratos } from '@/hooks/useContratos';
-import { useReporte } from '@/hooks/useReporte';
+import { useReporte, useValorContrato } from '@/hooks/useReporte';
 import { formatDate, formatDateTime, formatNumber, formatPercent, } from '@/lib/format';
 import { parseReport } from '@/lib/report';
 const FINANCIAL_SECTION = /^(ras|pagos?|financier)/i;
 const FINANCIAL_ROW = /^(valor|facturad|saldo|fondos|total pagado)/i;
+const FORMATO_MONEDA = new Intl.NumberFormat('es-CO', {
+    style: 'currency',
+    currency: 'COP',
+    maximumFractionDigits: 0,
+});
 function InfoBlock({ label, value }) {
     return (<div className="info-bloque">
       <p className="micro-label">{label}</p>
@@ -51,6 +56,7 @@ export function ContratoDetailPage() {
     const { noContrato = '' } = useParams();
     const { data: contratos, isLoading: loadingContratos } = useContratos();
     const reporte = useReporte(noContrato);
+    const valorContrato = useValorContrato(noContrato);
     const { events, status } = useCdc();
     const [copied, setCopied] = useState(false);
     const contrato = useMemo(() => contratos?.find((item) => item.noContrato === noContrato), [contratos, noContrato]);
@@ -87,28 +93,28 @@ export function ContratoDetailPage() {
     }
     if (loadingContratos) {
         return (<div className="pila-pagina-amplia">
-        <PageHeader eyebrow="Detalle del contrato" title={noContrato}/>
-        <TableSkeleton rows={6}/>
-      </div>);
+          <PageHeader eyebrow="Detalle del contrato" title={noContrato}/>
+          <TableSkeleton rows={6}/>
+        </div>);
     }
     if (notFound) {
         return (<div className="pila-pagina-amplia">
-        <Link to="/contratos" className="enlace-volver">
-          <ArrowLeft/>
-          Volver a contratos
-        </Link>
-        <Card>
-          <EmptyState icon={FileText} title="Contrato no encontrado" description={`No existe información para el contrato ${noContrato}.`} action={<Link to="/contratos" className="btn btn-primary">
-                Ver todos los contratos
-              </Link>}/>
-        </Card>
-      </div>);
+          <Link to="/contratos" className="enlace-volver">
+            <ArrowLeft/>
+            Volver a contratos
+          </Link>
+          <Card>
+            <EmptyState icon={FileText} title="Contrato no encontrado" description={`No existe información para el contrato ${noContrato}.`} action={<Link to="/contratos" className="btn btn-primary">
+                  Ver todos los contratos
+                </Link>}/>
+          </Card>
+        </div>);
     }
     if (reporte.isError && !contrato) {
         return (<div className="pila-pagina-amplia">
-        <PageHeader eyebrow="Detalle del contrato" title={noContrato}/>
-        <ErrorState title="No fue posible obtener el reporte" message="El backend no respondió con el detalle de este contrato." onRetry={() => reporte.refetch()}/>
-      </div>);
+          <PageHeader eyebrow="Detalle del contrato" title={noContrato}/>
+          <ErrorState title="No fue posible obtener el reporte" message="El backend no respondió con el detalle de este contrato." onRetry={() => reporte.refetch()}/>
+        </div>);
     }
     const avance = contrato?.porcentajeAvance ?? 0;
     const avanceDeclarado = contrato?.avanceDeclarado ?? 0;
@@ -137,13 +143,24 @@ export function ContratoDetailPage() {
             </button>
           </>}/>
 
-      <div className="kpi-cuadricula kpi-cuadricula-cuatro">
+      <div className="kpi-cuadricula kpi-cuadricula-cinco">
         <KpiCard label="Avance certificado" value={formatPercent(avance, 0)} hint={avance === 0 && avanceDeclarado > 0
             ? `Declarado por el supervisor: ${formatPercent(avanceDeclarado, 0)} · sin cuenta radicada`
             : `${contrato?.totalSupervisiones ?? 0} supervisiones registradas`} icon={TrendingUp} tone="violet" footer={<ProgressBar value={avance} size="sm"/>}/>
         <KpiCard label="Estado actual" value={<EstadoBadge id={estadoId} label={estadoNombre}/>} hint={contrato?.fechaEstado ? `Actualizado ${formatDateTime(contrato.fechaEstado)}` : 'Sin fecha de estado'} icon={ClipboardCheck} tone="amber"/>
         <KpiCard label="Cuentas de cobro" value={`${formatNumber(contrato?.cuentasRegistradas ?? 0)} / ${formatNumber(contrato?.cuentasEsperadas ?? 0)}`} hint={`${formatNumber(contrato?.cuentasExigibles ?? 0)} exigibles · ${formatNumber(contrato?.cuentasEnMora ?? 0)} en mora`} icon={FileText} tone={(contrato?.cuentasEnMora ?? 0) > 0 ? 'rose' : 'slate'}/>
         <KpiCard label="Fecha de terminación" value={formatDate(contrato?.fechaFin)} hint={contrato?.fechaInicio ? `Inició ${formatDate(contrato.fechaInicio)}` : undefined} icon={Activity} tone="slate"/>
+        <KpiCard
+          label="Valor del contrato"
+          value={valorContrato.isLoading
+            ? 'Consultando…'
+            : Number.isFinite(valorContrato.data?.valorTotal)
+              ? FORMATO_MONEDA.format(valorContrato.data.valorTotal)
+              : 'No disponible'}
+          hint="Valor registrado en Supervisa"
+          icon={DollarSign}
+          tone="emerald"
+        />
       </div>
 
       <FlujoCuenta cuentas={contrato?.cuentasDetalle ?? []}/>
@@ -240,5 +257,5 @@ export function ContratoDetailPage() {
               </li>))}
           </ol>)}
       </Card>
-    </div>);
+      </div>);
 }

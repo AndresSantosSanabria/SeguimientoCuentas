@@ -16,16 +16,24 @@ export const MESES = [
 ];
 const TOP_SECRETARIAS = 8;
 export function aniosDisponibles(contratos) {
-    const anios = new Set();
+    const anios = [];
     for (const contrato of contratos) {
         const inicio = parseDateOnly(contrato.fechaInicio);
-        if (!inicio)
-            continue;
-        const anio = inicio.getFullYear();
-        if (anio >= 1900 && anio <= 2100)
-            anios.add(anio);
+        const fin = parseDateOnly(contrato.fechaFin);
+        if (inicio && inicio.getFullYear() >= 1900 && inicio.getFullYear() <= 2100) anios.push(inicio.getFullYear());
+        if (fin && fin.getFullYear() >= 1900 && fin.getFullYear() <= 2100) anios.push(fin.getFullYear());
     }
-    return [...anios].sort((a, b) => b - a);
+    if (anios.length === 0) return [new Date().getFullYear()];
+    const desde = Math.min(...anios);
+    const hasta = Math.max(new Date().getFullYear(), ...anios);
+    return Array.from({ length: hasta - desde + 1 }, (_, index) => hasta - index);
+}
+export function contratoEnAnios(contrato, anios) {
+    if (!Array.isArray(anios) || anios.length === 0) return true;
+    const inicio = parseDateOnly(contrato.fechaInicio);
+    const fin = parseDateOnly(contrato.fechaFin) ?? inicio;
+    if (!inicio || !fin || fin < inicio) return false;
+    return anios.some((anio) => anio >= inicio.getFullYear() && anio <= fin.getFullYear());
 }
 export function secretariasDisponibles(contratos) {
     const labels = new Set();
@@ -102,10 +110,12 @@ export function solapaRango(inicio, fin, rango) {
     return inicio.getTime() <= rango.hasta.getTime() && fin.getTime() >= rango.desde.getTime();
 }
 /** Cuota que entra en el cálculo: entre fechas si hay rango, si no en los meses pedidos. */
-export function cuotaVisible(cuota, { anio, desde, hasta, rango }) {
+export function cuotaVisible(cuota, { anio, anios, desde, hasta, rango }) {
     if (rango)
         return solapaRango(cuota.inicio, cuota.fin, rango);
-    return cuota.anio === Number(anio) && cuota.mes >= desde && cuota.mes <= hasta;
+    const seleccion = Array.isArray(anios) ? anios : [];
+    return (seleccion.length === 0 ? cuota.anio <= Number(anio) : seleccion.includes(cuota.anio))
+        && cuota.mes >= desde && cuota.mes <= hasta;
 }
 /**
  * Corte real del cálculo. Con rango de fechas el corte es «Hasta» (tope hoy),
@@ -114,15 +124,24 @@ export function cuotaVisible(cuota, { anio, desde, hasta, rango }) {
 export function corteEfectivo(filtros, hoy = startOfDay(new Date())) {
     const inicioDia = startOfDay(hoy);
     const rango = rangoFechas(filtros, inicioDia);
-    if (!rango)
-        return cortePeriodo(filtros.anio, filtros.mes, inicioDia, filtros.mesHasta ?? null);
+    if (!rango) {
+        const anios = Array.isArray(filtros.anios) ? filtros.anios : [];
+        return cortePeriodo(anios.length ? Math.max(...anios) : filtros.anio,
+                filtros.mes, inicioDia, filtros.mesHasta ?? null);
+    }
     return rango.hasta.getTime() < inicioDia.getTime() ? rango.hasta : inicioDia;
 }
 /** Etiqueta del período en pantalla: el rango de fechas si está activo, si no el mes/año. */
 export function periodoFiltroLabel(filtros, hoy = new Date()) {
     const rango = rangoFechas(filtros, startOfDay(hoy));
-    if (!rango)
-        return periodoLabel(filtros.anio, filtros.mes, filtros.mesHasta ?? null);
+    if (!rango) {
+        const anios = Array.isArray(filtros.anios) ? filtros.anios : [];
+        const etiquetaAnios = anios.length === 0 ? 'Todos los años' : anios.slice().sort((a, b) => a - b).join(', ');
+        const { desde, hasta } = rangoMeses(filtros.mes, filtros.mesHasta ?? null);
+        const etiquetaMes = desde === 1 && hasta === 12 ? '' : desde === hasta
+            ? ` · ${MESES[desde - 1]}` : ` · ${MESES[desde - 1]}–${MESES[hasta - 1]}`;
+        return `${etiquetaAnios}${etiquetaMes}`;
+    }
     const dia = (value) => `${String(value.getDate()).padStart(2, '0')}/${String(value.getMonth() + 1).padStart(2, '0')}/${value.getFullYear()}`;
     if (rango.desde.getTime() === FECHA_SIN_INICIO.getTime())
         return `Hasta el ${dia(rango.hasta)}`;
@@ -276,6 +295,8 @@ export function buildCuentasSecretaria(contratos, filtros, hoy = new Date()) {
         const calendario = cuotasEnPeriodo(inicio, fin, corte);
         if (calendario.length <= 0)
             continue;
+        // Es una foto acumulada al corte; el selector global de año ya restringió
+        // los contratos al conjunto de años pedido y no se vuelve a cortar aquí.
         const visibles = rango
             ? calendario.filter((cuota) => solapaRango(cuota.inicio, cuota.fin, rango))
             : calendario;

@@ -3,7 +3,6 @@ package com.sgcc.seguimientocuentas.contratos.domain.service;
 import com.sgcc.seguimientocuentas.contratos.adapter.out.jpa.CtPEstadoRepository;
 import com.sgcc.seguimientocuentas.contratos.adapter.out.jpa.CtTContratoSapRepository;
 import com.sgcc.seguimientocuentas.contratos.adapter.out.jpa.CtTRazabilidadRepository;
-import com.sgcc.seguimientocuentas.contratos.adapter.out.jpa.CtTSupervisionRepository;
 import com.sgcc.seguimientocuentas.contratos.adapter.out.jpa.ContratoResumenProyeccion;
 import com.sgcc.seguimientocuentas.contratos.adapter.out.jpa.InformeActividadJdbcRepository;
 import com.sgcc.seguimientocuentas.contratos.adapter.out.jpa.InformeActividadRow;
@@ -14,7 +13,6 @@ import com.sgcc.seguimientocuentas.contratos.domain.model.Catalogos;
 import com.sgcc.seguimientocuentas.contratos.domain.model.CtPEstado;
 import com.sgcc.seguimientocuentas.contratos.domain.model.CtTContratoSap;
 import com.sgcc.seguimientocuentas.contratos.domain.model.CtTRazabilidad;
-import com.sgcc.seguimientocuentas.contratos.domain.model.CtTSupervision;
 import com.sgcc.seguimientocuentas.contratos.domain.model.FichaContrato;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
@@ -63,7 +61,6 @@ public class ContratoProgresoService {
     );
 
     private final CtTContratoSapRepository contratoSapRepository;
-    private final CtTSupervisionRepository supervisionRepository;
     private final SupervisionJdbcRepository supervisionJdbcRepository;
     private final CtTRazabilidadRepository trazabilidadRepository;
     private final CtPEstadoRepository estadoRepository;
@@ -74,14 +71,12 @@ public class ContratoProgresoService {
     private final Map<Long, String> nombresSupervisor = new ConcurrentHashMap<>();
 
     public ContratoProgresoService(CtTContratoSapRepository contratoSapRepository,
-                                    CtTSupervisionRepository supervisionRepository,
                                     SupervisionJdbcRepository supervisionJdbcRepository,
                                     CtTRazabilidadRepository trazabilidadRepository,
                                     CtPEstadoRepository estadoRepository,
                                     InformeActividadJdbcRepository informeActividadRepository,
                                     SupervisorJdbcRepository supervisorRepository) {
         this.contratoSapRepository = contratoSapRepository;
-        this.supervisionRepository = supervisionRepository;
         this.supervisionJdbcRepository = supervisionJdbcRepository;
         this.trazabilidadRepository = trazabilidadRepository;
         this.estadoRepository = estadoRepository;
@@ -125,6 +120,12 @@ public class ContratoProgresoService {
         } catch (Exception e) {
             log.warn("No se pudo leer t_usuarios: {}", e.getMessage());
         }
+    }
+
+    public void actualizarSupervisor(long id, String nombre, boolean borrar) {
+        if (id <= 0) return;
+        if (borrar || nombre == null || nombre.isBlank()) nombresSupervisor.remove(id);
+        else nombresSupervisor.put(id, nombre.trim());
     }
 
     /**
@@ -184,6 +185,8 @@ public class ContratoProgresoService {
         CtTContratoSap origen = contrato.get();
         FichaContrato ficha = new FichaContrato(origen.getId(), origen.getNoContrato(), origen.getContratista(),
                 origen.getDependencia(), origen.getFechaInicio(), origen.getFechaFin());
+        ficha.actualizarMaestro(origen.getContratista(), origen.getDependencia(), origen.getFechaInicio(),
+                origen.getFechaFin(), origen.getValorTotal());
         for (CtTRazabilidad traza : trazabilidadRepository.findByNoContratoOrderByIdAsc(noContrato)) {
             ficha.ponerTraza(traza);
         }
@@ -215,8 +218,11 @@ public class ContratoProgresoService {
     }
 
     private static FichaContrato ficha(ContratoResumenProyeccion contrato) {
-        return new FichaContrato(contrato.getId(), contrato.getNoContrato(), contrato.getContratista(),
+        FichaContrato ficha = new FichaContrato(contrato.getId(), contrato.getNoContrato(), contrato.getContratista(),
                 contrato.getDependencia(), contrato.getFechaInicio(), contrato.getFechaFin());
+        ficha.actualizarMaestro(contrato.getContratista(), contrato.getDependencia(), contrato.getFechaInicio(),
+                contrato.getFechaFin(), contrato.getValorTotal());
+        return ficha;
     }
 
     /** Mismo filtro que la consulta del resumen: sin contratista no hay contrato que mostrar. */
@@ -224,77 +230,4 @@ public class ContratoProgresoService {
         return contratista != null && !contratista.isBlank();
     }
 
-    public String calcularProgreso(String noContrato) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("\n");
-        sb.append("========================================\n");
-        sb.append("CONTRATO: ").append(noContrato).append("\n");
-        sb.append("========================================\n");
-
-        Optional<CtTContratoSap> contratoOpt = contratoSapRepository.findByNoContrato(noContrato);
-        if (contratoOpt.isEmpty()) {
-            sb.append("  Contrato no encontrado\n");
-            return sb.toString();
-        }
-
-        CtTContratoSap contrato = contratoOpt.get();
-        sb.append("  Contratista: ").append(contrato.getContratista()).append("\n");
-
-        List<CtTSupervision> supervisiones = supervisionRepository.findByNoContratoOrderByNoSupervisionAsc(noContrato);
-        CtTSupervision ultimaSupervision = supervisiones.isEmpty() ? null : supervisiones.get(supervisiones.size() - 1);
-
-        sb.append("\n--- SUPERVISION ---\n");
-        sb.append("  Supervisiones: ").append(supervisiones.size()).append(" de 12\n");
-
-        List<CtTRazabilidad> trazabilidades = trazabilidadRepository.findByNoContratoOrderByFechaDesc(noContrato);
-
-        sb.append("\n--- FLUJO PROCESO ---\n");
-
-        if (trazabilidades.isEmpty()) {
-            sb.append("  Estado: SIN INICIO - Contratista debe cargar informe de actividades\n");
-        } else {
-            CtTRazabilidad ultimoRegistro = trazabilidades.get(0);
-            String estadoActual = resolverEstado(ultimoRegistro.getIdEstado());
-            String responsable = ultimoRegistro.getDescripcion() != null ? ultimoRegistro.getDescripcion() : "";
-
-            sb.append("  Estado actual: ").append(estadoActual).append("\n");
-            if (!responsable.isEmpty()) {
-                sb.append("  Detalle: ").append(responsable).append("\n");
-            }
-            sb.append("  Fecha: ").append(ultimoRegistro.getFecha()).append("\n");
-
-            String pasoSiguiente = SIGUIENTES_PASOS.get(ultimoRegistro.getIdEstado());
-            if (pasoSiguiente != null) {
-                sb.append("  Siguiente paso: ").append(pasoSiguiente).append("\n");
-            }
-        }
-
-        if (ultimaSupervision != null) {
-            int informesRegistrados = informeActividadRepository
-                    .contarPorContratos(List.of(noContrato))
-                    .getOrDefault(noContrato, 0);
-            sb.append("\n--- ESTADO SUPERVISIÓN ---\n");
-            sb.append("  No. Supervisión: ").append(ultimaSupervision.getNoSupervision()).append("\n");
-            sb.append("  % Avance declarado: ").append(ultimaSupervision.getPorcentajeAvance() != null ? ultimaSupervision.getPorcentajeAvance() : 0).append("%\n");
-            if (informesRegistrados > 0) {
-                sb.append("  Informe de actividades: CARGADO (").append(informesRegistrados).append(")\n");
-            } else {
-                sb.append("  Informe de actividades: PENDIENTE\n");
-            }
-            if (ultimaSupervision.getEnFirme() != null && ultimaSupervision.getEnFirme()) {
-                sb.append("  Estado: EN FIRME\n");
-            }
-            if (ultimaSupervision.getObservacion() != null && !ultimaSupervision.getObservacion().isEmpty()) {
-                sb.append("  Observación: ").append(ultimaSupervision.getObservacion()).append("\n");
-            }
-        }
-
-        sb.append("\n========================================\n");
-
-        return sb.toString();
-    }
-
-    private String resolverEstado(int idEstado) {
-        return estadosMap.getOrDefault(idEstado, "Estado " + idEstado);
-    }
 }

@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowUpRight, CheckCircle2, ChevronRight, Download } from 'lucide-react';
+import { AlertTriangle, ArrowUpRight, CheckCircle2, ChevronRight, Download, Search } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { EstadoBadge } from '@/components/ui/EstadoBadge';
@@ -6,7 +6,7 @@ import { Modal } from '@/components/ui/Modal';
 import { dependenciaLabel } from '@/lib/dependencias';
 import { cuentasAlDia, cuentasRepresadas } from '@/lib/supervisores';
 import { cuentasSupervisor, descargarSupervisorDetalleExcel } from '@/lib/supervisoresExcel';
-import { formatDate, formatNumber } from '@/lib/format';
+import { formatDate, formatNumber, normalizar } from '@/lib/format';
 
 function Dato({ label, value, className = '' }) {
   return (
@@ -104,11 +104,18 @@ function DetalleContrato({ contrato }) {
 export function SupervisorContratosModal({ supervisor, onClose }) {
   const contratos = supervisor?.contratos ?? [];
   const [seleccionado, setSeleccionado] = useState(0);
+  const [busqueda, setBusqueda] = useState('');
   const [exportando, setExportando] = useState(false);
   const hoy = useMemo(() => new Date(), []);
   const filasCuentas = useMemo(() => cuentasSupervisor(supervisor, hoy), [supervisor, hoy]);
   useEffect(() => setSeleccionado(0), [supervisor?.label]);
+  const contratosFiltrados = useMemo(() => {
+    const termino = normalizar(busqueda);
+    return contratos.map((contrato, index) => ({ contrato, index })).filter(({ contrato }) =>
+      !termino || normalizar(`${contrato.noContrato} ${contrato.contratista} ${dependenciaLabel(contrato)}`).includes(termino));
+  }, [contratos, busqueda]);
   const actual = contratos[Math.min(seleccionado, Math.max(0, contratos.length - 1))];
+  useEffect(() => setSeleccionado(contratosFiltrados[0]?.index ?? -1), [contratosFiltrados]);
 
   async function descargar() {
     if (exportando || contratos.length === 0) return;
@@ -142,9 +149,19 @@ export function SupervisorContratosModal({ supervisor, onClose }) {
     >
       <div className="modal-supervisor">
         <div>
-          <p className="micro-label micro-label-encabezado">Contratos asignados</p>
+          <p className="micro-label micro-label-encabezado">Contratos asignados · {formatNumber(contratosFiltrados.length)} de {formatNumber(contratos.length)}</p>
+          <label className="buscador-supervisor">
+            <Search aria-hidden="true" />
+            <input
+              type="search"
+              value={busqueda}
+              onChange={(event) => setBusqueda(event.target.value)}
+              placeholder="Buscar contrato, contratista o secretaría"
+              aria-label="Buscar contratos asignados"
+            />
+          </label>
           <ul className="modal-supervisor-lista">
-            {contratos.map((contrato, index) => {
+            {contratosFiltrados.map(({ contrato, index }) => {
               const represadas = cuentasRepresadas(contrato);
               return (
                 <li key={contrato.noContrato ?? index}>
@@ -174,6 +191,7 @@ export function SupervisorContratosModal({ supervisor, onClose }) {
                 </li>
               );
             })}
+            {contratosFiltrados.length === 0 ? <li className="modal-supervisor-vacio">No hay contratos que coincidan con la búsqueda.</li> : null}
           </ul>
         </div>
 

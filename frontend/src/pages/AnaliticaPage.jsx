@@ -1,5 +1,6 @@
 import { ArrowUpRight, ClipboardCheck, ClipboardList, Download, FileCheck2, Radio, RefreshCw, Search, TrendingUp, Users, Wifi, WifiOff, } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { ChartCard } from '@/components/charts/ChartCard';
 import { CUENTAS_COLORS, CuentasSecretariaBars } from '@/components/charts/CuentasSecretariaBars';
@@ -15,17 +16,20 @@ import { KpiCard } from '@/components/ui/KpiCard';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { SelectorSecretarias } from '@/components/ui/SelectorSecretarias';
+import { SelectorAnios } from '@/components/ui/SelectorAnios';
 import { ChartSkeleton, KpiSkeleton } from '@/components/ui/Skeletons';
+import { useAuth } from '@/context/AuthContext';
 import { useCdc } from '@/hooks/useCdc';
 import { useContratos } from '@/hooks/useContratos';
+import { fetchContratosSupervisados } from '@/api/contratos';
 import { useContractAnalytics } from '@/hooks/useContractAnalytics';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
-import { MESES, aniosDisponibles, buildCuentasSecretaria, corteEfectivo, periodoFiltroLabel, secretariasDisponibles, } from '@/lib/cuentasSecretaria';
+import { MESES, aniosDisponibles, buildCuentasSecretaria, contratoEnAnios, corteEfectivo, periodoFiltroLabel, secretariasDisponibles, } from '@/lib/cuentasSecretaria';
 import { ALCANCES, SITUACIONES, buildCuentasDetalle, descargarCuentasExcel } from '@/lib/cuentasExcel';
 import { ESTADO_GRUPOS } from '@/lib/estados';
 import { descargarSupervisoresExcel } from '@/lib/supervisoresExcel';
 import { buildContratosPorSupervisor } from '@/lib/supervisores';
-import { formatDate, formatDateTime, formatNumber, formatPercent, formatRelativeTime, truncate, } from '@/lib/format';
+import { formatDate, formatDateTime, formatNumber, formatPercent, formatRelativeTime, normalizar, truncate, } from '@/lib/format';
 const ETIQUETAS_ESTATUS = {
     connected: {
         label: 'Analítica en vivo',
@@ -63,11 +67,17 @@ function CuentasLegend() {
 }
 export function AnaliticaPage() {
     const { data, isLoading, isError, refetch } = useContratos();
-    const analytics = useContractAnalytics(data);
     const { status, url, events, lastEvent, reconnect } = useCdc();
+    const { puede, rol, secretarias: secretariasSesion } = useAuth();
+    const contratosSupervisadosQuery = useQuery({
+        queryKey: ['contratos', 'supervisados'],
+        queryFn: fetchContratosSupervisados,
+        enabled: rol?.codigo === 'ENLACE',
+        staleTime: 30_000,
+    });
     const navigate = useNavigate();
     const hoy = useMemo(() => new Date(), []);
-    const [anio, setAnio] = useState(hoy.getFullYear());
+    const [aniosSeleccionados, setAniosSeleccionados] = useState([hoy.getFullYear()]);
     const [mes, setMes] = useState(hoy.getMonth() + 1);
     const [mesHasta, setMesHasta] = useState('');
     const [desdeFecha, setDesdeFecha] = useState('');
@@ -82,28 +92,55 @@ export function AnaliticaPage() {
     const [soloDeuda, setSoloDeuda] = useState(true);
     const [secretariasSupervisor, setSecretariasSupervisor] = useState([]);
     const [busquedaSupervisor, setBusquedaSupervisor] = useState('');
+    const [limiteSupervisores, setLimiteSupervisores] = useState('12');
     const [supervisorSeleccionado, setSupervisorSeleccionado] = useState(null);
     const textoCuentaFiltrado = useDebouncedValue(textoCuenta.trim(), 250);
     const supervisorFiltrado = useDebouncedValue(busquedaSupervisor.trim(), 250);
-    const anios = useMemo(() => (data ? aniosDisponibles(data) : []), [data]);
-    const opcionesAnio = useMemo(() => [...new Set([hoy.getFullYear(), ...anios])].sort((a, b) => b - a), [anios, hoy]);
+    const opcionesAnio = useMemo(() => [...new Set([hoy.getFullYear(), ...(data ? aniosDisponibles(data) : [])])].sort((a, b) => b - a), [data, hoy]);
     const opcionesSecretaria = useMemo(() => (data ? secretariasDisponibles(data) : []), [data]);
+    const contratosFiltrados = useMemo(() => (data ?? []).filter((contrato) => contratoEnAnios(contrato, aniosSeleccionados)), [data, aniosSeleccionados]);
+    const analytics = useContractAnalytics(data ? contratosFiltrados : null);
+    const anio = aniosSeleccionados.length ? Math.max(...aniosSeleccionados) : hoy.getFullYear();
     const rangoActivo = Boolean(desdeFecha || hastaFecha);
-    const filtrosCuentas = useMemo(() => ({ anio, mes, mesHasta, desdeFecha, hastaFecha, secretarias, situacion, alcance, estado: estadoGrupo, texto: textoCuentaFiltrado, }), [anio, mes, mesHasta, desdeFecha, hastaFecha, secretarias, situacion, alcance, estadoGrupo, textoCuentaFiltrado]);
-    const cuentasSecretaria = useMemo(() => buildCuentasSecretaria(data ?? [], { anio, mes, mesHasta, desdeFecha, hastaFecha, secretarias, soloDeuda }, hoy), [data, anio, mes, mesHasta, desdeFecha, hastaFecha, secretarias, soloDeuda, hoy]);
-    const detalleCuentas = useMemo(() => (data ? buildCuentasDetalle(data, filtrosCuentas, hoy) : []), [data, filtrosCuentas, hoy]);
+    const filtrosCuentas = useMemo(() => ({ anio, anios: aniosSeleccionados, mes, mesHasta, desdeFecha, hastaFecha, secretarias, situacion, alcance, soloDeuda, estado: estadoGrupo, texto: textoCuentaFiltrado, }), [anio, aniosSeleccionados, mes, mesHasta, desdeFecha, hastaFecha, secretarias, situacion, alcance, soloDeuda, estadoGrupo, textoCuentaFiltrado]);
+    const cuentasSecretaria = useMemo(() => buildCuentasSecretaria(contratosFiltrados, filtrosCuentas, hoy), [contratosFiltrados, filtrosCuentas, hoy]);
+    const detalleCuentas = useMemo(() => (data ? buildCuentasDetalle(contratosFiltrados, filtrosCuentas, hoy) : []), [data, contratosFiltrados, filtrosCuentas, hoy]);
     const descargarCuentas = async () => {
         if (!data || exportando || detalleCuentas.length === 0)
             return;
         setExportando(true);
         try {
-            await descargarCuentasExcel(data, filtrosCuentas, hoy);
+            await descargarCuentasExcel(contratosFiltrados, filtrosCuentas, hoy);
         }
         finally {
             setExportando(false);
         }
     };
-    const contratosPorSupervisor = useMemo(() => buildContratosPorSupervisor(data ?? [], { secretarias: secretariasSupervisor, busqueda: supervisorFiltrado }), [data, secretariasSupervisor, supervisorFiltrado]);
+    const topeSupervisores = limiteSupervisores === 'todos' ? Number.POSITIVE_INFINITY : Number(limiteSupervisores);
+    const contratosPorSupervisor = useMemo(() => buildContratosPorSupervisor(contratosFiltrados, {
+        secretarias: secretariasSupervisor,
+        busqueda: supervisorFiltrado,
+        limite: topeSupervisores,
+        limiteBusqueda: topeSupervisores,
+    }), [contratosFiltrados, secretariasSupervisor, supervisorFiltrado, topeSupervisores]);
+    const detalleSupervisor = useMemo(() => {
+        if (!supervisorSeleccionado || rol?.codigo !== 'ENLACE') return supervisorSeleccionado;
+        const permitidas = new Set(secretariasSesion.map(normalizar));
+        const existentes = new Set((supervisorSeleccionado.contratos ?? []).map((item) => item.noContrato));
+        const adicionales = (contratosSupervisadosQuery.data ?? [])
+            .filter((item) => normalizar(item.supervisor) === normalizar(supervisorSeleccionado.label))
+            .map((item) => item.contrato)
+            .filter((item) => !permitidas.has(normalizar(item.dependencia)) && !existentes.has(item.noContrato)
+                && contratoEnAnios(item, aniosSeleccionados));
+        if (!adicionales.length) return supervisorSeleccionado;
+        return {
+            ...supervisorSeleccionado,
+            value: supervisorSeleccionado.value + adicionales.length,
+            alDia: supervisorSeleccionado.alDia + adicionales.reduce((sum, item) => sum + Math.min(item.cuentasRegistradas ?? 0, item.cuentasExigibles ?? 0), 0),
+            represadas: supervisorSeleccionado.represadas + adicionales.reduce((sum, item) => sum + (item.cuentasEnMora ?? 0), 0),
+            contratos: [...supervisorSeleccionado.contratos, ...adicionales],
+        };
+    }, [supervisorSeleccionado, rol, secretariasSesion, contratosSupervisadosQuery.data, aniosSeleccionados]);
     const descargarSupervisores = async () => {
         if (exportandoSupervisor || contratosPorSupervisor.coincidencias.length === 0)
             return;
@@ -130,36 +167,36 @@ export function AnaliticaPage() {
     const menorAvance = useMemo(() => {
         if (!data)
             return [];
-        return [...data]
+        return [...contratosFiltrados]
             .filter((contrato) => contrato.totalSupervisiones > 0)
             .sort((a, b) => (a.avanceDeclarado ?? 0) - (b.avanceDeclarado ?? 0))
             .slice(0, 10);
-    }, [data]);
+    }, [contratosFiltrados]);
     const informesPendientes = useMemo(() => {
         if (!data)
             return [];
-        return data
+        return contratosFiltrados
             .filter((contrato) => contrato.totalSupervisiones > 0 && !contrato.informeCargado)
             .sort((a, b) => b.porcentajeAvance - a.porcentajeAvance)
             .slice(0, 10);
-    }, [data]);
+    }, [contratosFiltrados]);
     if (isLoading) {
         return (<div className="pila-pagina-amplia">
-        <PageHeader eyebrow="Analítica" title="Analítica" description="Consolidando la información de contratos…"/>
-        <div className="kpi-cuadricula kpi-cuadricula-seis">
-          {Array.from({ length: 6 }).map((_, index) => (<KpiSkeleton key={index}/>))}
-        </div>
-        <div className="cuadricula-panel">
-          <ChartSkeleton height={340}/>
-          <ChartSkeleton height={340}/>
-        </div>
-      </div>);
+          <PageHeader eyebrow="Analítica" title="Analítica" description="Consolidando la información de contratos…"/>
+          <div className="kpi-cuadricula kpi-cuadricula-seis">
+            {Array.from({ length: 6 }).map((_, index) => (<KpiSkeleton key={index}/>))}
+          </div>
+          <div className="cuadricula-panel">
+            <ChartSkeleton height={340}/>
+            <ChartSkeleton height={340}/>
+          </div>
+        </div>);
     }
     if (isError || !analytics || !data) {
         return (<div className="pila-pagina-amplia">
-        <PageHeader eyebrow="Analítica" title="Analítica"/>
-        <ErrorState onRetry={() => refetch()}/>
-      </div>);
+          <PageHeader eyebrow="Analítica" title="Analítica"/>
+          <ErrorState onRetry={() => refetch()}/>
+        </div>);
     }
     const { supervision, kpis, estadoCuentas } = analytics;
     const info = ETIQUETAS_ESTATUS[status];
@@ -240,6 +277,11 @@ export function AnaliticaPage() {
         </div>
       </Card>
 
+      <div className="filtro-fila filtro-fila-periodo-global">
+        <SelectorAnios opciones={opcionesAnio} valor={aniosSeleccionados} onChange={setAniosSeleccionados} anioActual={hoy.getFullYear()} etiqueta="Años de analítica" />
+        <span className="texto-apoyo">Este filtro aplica a todos los indicadores, gráficas y tablas de esta página.</span>
+      </div>
+
       <div className="kpi-cuadricula kpi-cuadricula-seis">
         <KpiCard label="Cobertura" value={formatPercent(supervision.cobertura, 1)} hint={`${formatNumber(supervision.conSupervision)} contratos con supervisión`} icon={ClipboardCheck} tone="brand" footer={<ProgressBar value={supervision.cobertura} size="sm"/>}/>
         <KpiCard label="Con supervisión" value={formatNumber(supervision.conSupervision)} hint="Al menos un registro" icon={Users} tone="sky"/>
@@ -280,17 +322,6 @@ export function AnaliticaPage() {
               {rangoActivo ? (<button type="button" className="btn btn-ghost btn-limpiar-rango" onClick={() => { setDesdeFecha(''); setHastaFecha(''); }} title="Quitar el rango de fechas y volver a los selectores de año y mes">
                   Quitar rango
                 </button>) : null}
-
-              <label className="campo-filtro">
-                <span className="field-label-corto">
-                  Año
-                </span>
-                <select className="input input-corto input-anio" value={anio} onChange={(event) => setAnio(Number(event.target.value))} disabled={rangoActivo} aria-label="Filtrar por año">
-                  {opcionesAnio.map((opcion) => (<option key={opcion} value={opcion}>
-                      {opcion}
-                    </option>))}
-                </select>
-              </label>
 
               <label className="campo-filtro">
                 <span className="field-label-corto">
@@ -367,13 +398,13 @@ export function AnaliticaPage() {
                 Solo con deuda
               </label>
 
-              <button type="button" className="btn btn-primary filtro-accion" onClick={descargarCuentas} disabled={exportando || detalleCuentas.length === 0} title="Excel con una fila por cuota del contrato: las radicadas con su período, estado y siguiente paso reales, y las pendientes sin radicar. Respeta secretarías, el rango de fechas (o el período en meses), situación, estado y búsqueda.">
+              {puede('CONTRATOS_EXPORTAR') ? (<button type="button" className="btn btn-primary filtro-accion" onClick={descargarCuentas} disabled={exportando || detalleCuentas.length === 0} title="Excel con una fila por cuota del contrato: las radicadas con su período, estado y siguiente paso reales, y las pendientes sin radicar. Respeta secretarías, el rango de fechas (o el período en meses), situación, estado y búsqueda.">
                 <Download/>
                 {exportando ? 'Generando…' : 'Descargar Excel'}
                 <span className="btn-contador">
                   {formatNumber(detalleCuentas.length)}
                 </span>
-              </button>
+              </button>) : null}
             </div>
 
             {detalleCuentas.length > 8000 ? (<p className="nota-volumen">
@@ -432,13 +463,29 @@ export function AnaliticaPage() {
 
               <SelectorSecretarias opciones={opcionesSecretaria} valor={secretariasSupervisor} onChange={setSecretariasSupervisor} etiqueta="Secretarías" />
 
-              <button type="button" className="btn btn-primary filtro-accion" onClick={descargarSupervisores} disabled={exportandoSupervisor || contratosPorSupervisor.coincidencias.length === 0} title="Excel con dos hojas: el resumen de todos los supervisores del filtro (no solo los del gráfico) y un renglón por cada contrato asignado.">
+              <label className="campo-filtro">
+                <span className="field-label-corto">Mostrar</span>
+                <select
+                  className="input input-corto"
+                  value={limiteSupervisores}
+                  onChange={(event) => setLimiteSupervisores(event.target.value)}
+                  aria-label="Cantidad de supervisores en el gráfico"
+                >
+                  <option value="12">12 supervisores</option>
+                  <option value="25">25 supervisores</option>
+                  <option value="50">50 supervisores</option>
+                  <option value="100">100 supervisores</option>
+                  <option value="todos">Todos</option>
+                </select>
+              </label>
+
+              {puede('CONTRATOS_EXPORTAR') ? (<button type="button" className="btn btn-primary filtro-accion" onClick={descargarSupervisores} disabled={exportandoSupervisor || contratosPorSupervisor.coincidencias.length === 0} title="Excel con dos hojas: el resumen de todos los supervisores del filtro (no solo los del gráfico) y un renglón por cada contrato asignado.">
                 <Download/>
                 {exportandoSupervisor ? 'Generando…' : 'Descargar Excel'}
                 <span className="btn-contador">
                   {formatNumber(contratosPorSupervisor.coincidencias.length)}
                 </span>
-              </button>
+              </button>) : null}
             </div>
 
             {contratosPorSupervisor.rows.length > 0 ? (<SupervisorBars data={contratosPorSupervisor.rows} height={Math.max(260, contratosPorSupervisor.rows.length * 32 + 40)} onSupervisorSelect={setSupervisorSeleccionado}/>) : (<EmptyState title={busquedaSupervisor.trim() ? 'Ningún supervisor coincide' : 'Sin supervisores asignados'} description={busquedaSupervisor.trim() ? 'Revisa la búsqueda o limpia el nombre para volver a ver toda la carga.' : 'Ningún contrato de estas secretarías tiene supervisor en su última supervisión registrada.'}/>)}
@@ -578,6 +625,6 @@ export function AnaliticaPage() {
         </Card>
       </div>
 
-      {supervisorSeleccionado ? (<SupervisorContratosModal supervisor={supervisorSeleccionado} onClose={() => setSupervisorSeleccionado(null)}/>) : null}
-    </div>);
+      {supervisorSeleccionado ? (<SupervisorContratosModal supervisor={detalleSupervisor} onClose={() => setSupervisorSeleccionado(null)}/>) : null}
+      </div>);
 }

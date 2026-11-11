@@ -17,6 +17,7 @@
 
 	<modules>
 		<module>seguimientocuentas-common</module>
+		<module>seguimientocuentas-accesos</module>
 		<module>seguimientocuentas-contratos</module>
 		<module>seguimientocuentas-cdc</module>
 		<module>seguimientocuentas-app</module>
@@ -33,6 +34,11 @@
 			<dependency>
 				<groupId>com.sgcc</groupId>
 				<artifactId>seguimientocuentas-common</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>com.sgcc</groupId>
+				<artifactId>seguimientocuentas-accesos</artifactId>
 				<version>${project.version}</version>
 			</dependency>
 			<dependency>

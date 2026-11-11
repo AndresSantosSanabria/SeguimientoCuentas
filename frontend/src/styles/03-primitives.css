@@ -389,6 +389,10 @@
   text-align: right;
 }
 
+.table-td-centro {
+  text-align: center;
+}
+
 .table-row {
   cursor: pointer;
   border-top: 1px solid var(--slate-100);
@@ -697,4 +701,12 @@
   border-top-color: var(--brand-600);
   border-radius: var(--radius-full);
   animation: giro 1s linear infinite;
+}
+
+/* ---- logo institucional en pantallas de carga ---- */
+.logo-app {
+  width: 4.5rem;
+  height: 4.5rem;
+  border-radius: 1rem;
+  box-shadow: 0 10px 24px rgb(10 29 82 / 0.18);
 }

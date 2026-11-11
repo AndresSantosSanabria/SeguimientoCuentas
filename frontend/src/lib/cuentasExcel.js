@@ -75,7 +75,10 @@ function cuentaEnFiltro(cuenta, filtro) {
         return false;
     if (filtro.rango)
         return solapaRango(inicio, parseDateOnly(cuenta.fechaFin) ?? inicio, filtro.rango);
-    return enRango(cuotaDe(inicio), filtro.anio, filtro.desde, filtro.hasta);
+    const cuota = cuotaDe(inicio);
+    const anios = Array.isArray(filtro.anios) ? filtro.anios : [];
+    return (anios.length === 0 ? cuota.anio <= Number(filtro.anio) : anios.includes(cuota.anio))
+        && cuota.mes >= filtro.desde && cuota.mes <= filtro.hasta;
 }
 function clave(cuota) {
     return cuota.anio * 12 + cuota.mes;
@@ -120,9 +123,9 @@ export function buildCuentasDetalle(contratos, filtros, hoy = new Date()) {
         const radicadas = cuentasRadicadas(contrato);
         const { porCuota, sobrantes } = emparejarCuentas(cuotas, radicadas);
         const cubiertas = cuentasCubiertas(contrato, cuotas);
-        const visibles = enCorte
-            ? cuotas
-            : cuotas.filter((cuota) => cuotaVisible(cuota, { anio: filtros.anio, desde, hasta, rango }));
+        const visibles = cuotas.filter((cuota) => enCorte
+            ? cuotaVisible(cuota, { anio: filtros.anio, anios: filtros.anios, desde: 1, hasta: 12, rango })
+            : cuotaVisible(cuota, { anio: filtros.anio, anios: filtros.anios, desde, hasta, rango }));
         if (visibles.length === 0 && radicadas.length === 0)
             continue;
         const pendientes = cuotas.length - cubiertas.size;
@@ -172,7 +175,7 @@ export function buildCuentasDetalle(contratos, filtros, hoy = new Date()) {
             continue;
         for (const cuenta of sobrantes) {
             const cuota = cuotaDe(parseDateOnly(cuenta.fechaInicio) ?? corte);
-            if (!enCorte && !cuentaEnFiltro(cuenta, { anio: filtros.anio, desde, hasta, rango }))
+            if (!cuentaEnFiltro(cuenta, { anio: filtros.anio, anios: filtros.anios, desde: enCorte ? 1 : desde, hasta: enCorte ? 12 : hasta, rango }))
                 continue;
             filas.push({
                 orden: clave(cuota) * 2 + 1,

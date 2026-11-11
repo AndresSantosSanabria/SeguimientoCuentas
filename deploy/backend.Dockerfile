@@ -10,6 +10,7 @@ WORKDIR /workspace
 COPY backend/pom.xml backend/mvnw ./
 COPY backend/.mvn .mvn
 COPY backend/seguimientocuentas-common/pom.xml seguimientocuentas-common/pom.xml
+COPY backend/seguimientocuentas-accesos/pom.xml seguimientocuentas-accesos/pom.xml
 COPY backend/seguimientocuentas-contratos/pom.xml seguimientocuentas-contratos/pom.xml
 COPY backend/seguimientocuentas-cdc/pom.xml seguimientocuentas-cdc/pom.xml
 COPY backend/seguimientocuentas-app/pom.xml seguimientocuentas-app/pom.xml
@@ -17,6 +18,7 @@ COPY backend/seguimientocuentas-app/pom.xml seguimientocuentas-app/pom.xml
 RUN chmod +x mvnw
 
 COPY backend/seguimientocuentas-common/src seguimientocuentas-common/src
+COPY backend/seguimientocuentas-accesos/src seguimientocuentas-accesos/src
 COPY backend/seguimientocuentas-contratos/src seguimientocuentas-contratos/src
 COPY backend/seguimientocuentas-cdc/src seguimientocuentas-cdc/src
 COPY backend/seguimientocuentas-app/src seguimientocuentas-app/src
@@ -50,6 +52,6 @@ VOLUME ["/app/data"]
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=15s --start-period=120s --retries=5 \
-    CMD curl -fsSI http://127.0.0.1:8080/api/contratos >/dev/null || exit 1
+    CMD curl -fsSI http://127.0.0.1:8080/healthz >/dev/null || exit 1
 
 ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar /app/app.jar"]

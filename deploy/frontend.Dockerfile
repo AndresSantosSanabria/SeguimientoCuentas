@@ -22,6 +22,14 @@ COPY deploy/nginx-main.conf /etc/nginx/nginx.conf
 COPY deploy/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html
 
+# Config de Keycloak en runtime: el entrypoint oficial de nginx ejecuta este
+# script al arrancar y escribe /config.js con las variables del contenedor.
+COPY deploy/app-entrypoint.sh /docker-entrypoint.d/40-keycloak-config.sh
+RUN chmod +x /docker-entrypoint.d/40-keycloak-config.sh
+
+# Proxy /oidc/token: copia por defecto (se sobreescribe en runtime).
+COPY deploy/oidc-proxy.default.conf /etc/nginx/oidc-proxy.conf
+
 EXPOSE 80
 
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \

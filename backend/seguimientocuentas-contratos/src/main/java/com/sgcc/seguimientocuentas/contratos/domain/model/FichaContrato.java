@@ -9,6 +9,7 @@ import com.sgcc.seguimientocuentas.contratos.domain.model.CtTRazabilidad;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.Period;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -34,6 +35,7 @@ public class FichaContrato {
     private int totalSupervisiones;
     private Short avanceDeclarado;
     private Long idSupervisor;
+    private BigDecimal valorTotal;
 
     public FichaContrato(Long id, String noContrato, String contratista, String dependencia,
                          String fechaInicio, String fechaFin) {
@@ -58,18 +60,37 @@ public class FichaContrato {
         return dto.getId();
     }
 
+    public BigDecimal valorTotal() {
+        return valorTotal;
+    }
+
+    public Long idSupervisorActual() {
+        return idSupervisor;
+    }
+
     /** El evento de la tabla maestra trae la fila completa: los campos maestros se reemplazan tal cual. */
-    public void actualizarMaestro(String contratista, String dependencia, String fechaInicio, String fechaFin) {
+    public void actualizarMaestro(String contratista, String dependencia, String fechaInicio, String fechaFin,
+                                  BigDecimal valorTotal) {
         dto.setContratista(contratista);
         dto.setDependencia(dependencia);
         dto.setFechaInicio(fechaInicio);
         dto.setFechaFin(fechaFin);
+        this.valorTotal = valorTotal;
     }
 
     public void setSupervision(int totalSupervisiones, Short avanceDeclarado, Long idSupervisor) {
         this.totalSupervisiones = totalSupervisiones;
         this.avanceDeclarado = avanceDeclarado;
         this.idSupervisor = idSupervisor;
+    }
+
+    public void aplicarEventoSupervision(boolean alta, boolean baja, Short avance, Long supervisor) {
+        if (alta) totalSupervisiones++;
+        if (baja) totalSupervisiones = Math.max(0, totalSupervisiones - 1);
+        if (!baja) {
+            avanceDeclarado = avance;
+            idSupervisor = supervisor;
+        }
     }
 
     public void ponerInforme(InformeActividadRow informe) {

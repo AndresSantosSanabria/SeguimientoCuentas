@@ -20,6 +20,24 @@ services:
       SUPERVISA_CDC_ENABLED: ${SUPERVISA_CDC_ENABLED:-true}
       SUPERVISA_CDC_SNAPSHOT_MODE: ${SUPERVISA_CDC_SNAPSHOT_MODE:-never}
       SUPERVISA_CDC_OFFSETS_FILE: /app/data/cdc-offsets.dat
+      # Keycloak: API como OAuth2 Resource Server (JWT). Con AUTH_ENABLED=false
+      # la API vuelve a quedar abierta como antes.
+      AUTH_ENABLED: ${AUTH_ENABLED:-true}
+      KEYCLOAK_ISSUER_URI: ${KEYCLOAK_ISSUER_URI:-}
+      KEYCLOAK_JWKS_URI: ${KEYCLOAK_JWKS_URI:-}
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-ge-cor}
+      # GECOR: base de usuarios, roles y permisos granulares. Con GECOR_ENABLED=false
+      # el acceso queda abierto para todos los autenticados (comportamiento anterior).
+      GECOR_ENABLED: ${GECOR_ENABLED:-false}
+      GECOR_DB_URL: ${GECOR_DB_URL:-jdbc:postgresql://host.docker.internal:5432/gecor}
+      GECOR_DB_USER: ${GECOR_DB_USER:-postgres}
+      GECOR_DB_PASSWORD: ${GECOR_DB_PASSWORD:-postgres}
+      # Crea la base GECOR si no existe y aplica las migraciones Flyway al arrancar.
+      # Requiere que GECOR_DB_USER tenga el privilegio CREATEDB.
+      GECOR_CREAR_BASE: ${GECOR_CREAR_BASE:-true}
+      # Bootstrap: quien coincida por correo o nombre recibe el rol ADMIN en su primer ingreso.
+      GECOR_ADMIN_CORREOS: ${GECOR_ADMIN_CORREOS:-fabio.santos@cundinamarca.gov.co}
+      GECOR_ADMIN_NOMBRES: ${GECOR_ADMIN_NOMBRES:-FABIO ANDRES SANTOS SANABRIA}
       TZ: America/Bogota
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -28,13 +46,44 @@ services:
     ports:
       - "${BACKEND_PORT:-8080}:8080"
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsSI http://127.0.0.1:8080/api/contratos >/dev/null || exit 1"]
+      test: ["CMD-SHELL", "curl -fsSI http://127.0.0.1:8080/healthz >/dev/null || exit 1"]
       interval: 30s
       # El HEAD del resumen paga la serializacion completa: en plena ventanada de CDC tarda
       # segundos y con 5s el contenedor quedaba unhealthy sin estar caido.
       timeout: 15s
       retries: 5
       start_period: 120s
+
+  # Repone la ruta del host de Docker hacia el Keycloak corporativo.
+  #
+  # Si alguna red bridge de Docker (de cualquier proyecto de la maquina) usa la
+  # subred 172.20.0.0/16, el host enruta el trafico hacia el Keycloak por ese
+  # bridge en vez de salir por eth0, y los contenedores se quedan sin salida:
+  # el navegador recibe 499 en /oidc/token y el login nunca termina.
+  # Con este servicio la ruta /32 hacia el Keycloak se mantiene vigente.
+  route-fixer:
+    image: alpine:3.20
+    container_name: ge-cor-route-fixer
+    restart: unless-stopped
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+    environment:
+      # Host del Keycloak al que hay que garantizar ruta desde los contenedores.
+      # Se deriva del issuer; el host es el destino real del trafico OIDC.
+      ROUTE_TARGET: ${KEYCLOAK_ISSUER_URI:-https://iamqa.cundinamarca.gov.co/realms/gob-cundinamarca-devqa}
+      ROUTE_TARGET_PREFIX: "32"
+      ROUTE_CHECK_INTERVAL: "30"
+    volumes:
+      - ./deploy/fix-route.sh:/fix-route.sh:ro
+    entrypoint: ["/bin/sh", "/fix-route.sh"]
+    healthcheck:
+      # Lo que de verdad importa: que desde los contenedores se alcance el
+      # Keycloak. Si la ruta se rompe, el proxy /oidc/token se cuelga.
+      test: ["CMD-SHELL", "wget -q -T 8 -O /dev/null $$ROUTE_TARGET/.well-known/openid-configuration || exit 1"]
+      interval: 60s
+      timeout: 15s
+      retries: 3
 
   frontend:
     build:
@@ -43,6 +92,20 @@ services:
     image: ge-cor-frontend:latest
     container_name: ge-cor-frontend
     restart: unless-stopped
+    environment:
+      # Se inyectan en /config.js al arrancar el contenedor (app-entrypoint.sh):
+      # la misma imagen sirve dev/QA/prod sin reconstruir.
+      VITE_API_URL: ${VITE_API_URL:-}
+      VITE_ENABLE_AUTH: ${VITE_ENABLE_AUTH:-true}
+      VITE_KEYCLOAK_BASE_URL: ${VITE_KEYCLOAK_BASE_URL:-}
+      VITE_KEYCLOAK_REALM: ${VITE_KEYCLOAK_REALM:-}
+      VITE_KEYCLOAK_CLIENT_ID: ${VITE_KEYCLOAK_CLIENT_ID:-}
+      VITE_KEYCLOAK_REDIRECT_URI: ${VITE_KEYCLOAK_REDIRECT_URI:-}
+      VITE_KEYCLOAK_POST_LOGOUT_REDIRECT_URI: ${VITE_KEYCLOAK_POST_LOGOUT_REDIRECT_URI:-}
+      VITE_KEYCLOAK_RESPONSE_TYPE: ${VITE_KEYCLOAK_RESPONSE_TYPE:-code}
+      VITE_KEYCLOAK_SCOPE: ${VITE_KEYCLOAK_SCOPE:-openid profile email}
+      # Mismo issuer que usa el backend: de aqui sale el destino de /oidc/token.
+      KEYCLOAK_ISSUER_URI: ${KEYCLOAK_ISSUER_URI:-}
     depends_on:
       backend:
         condition: service_started

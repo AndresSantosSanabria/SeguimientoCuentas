@@ -109,12 +109,19 @@ public class CdcEventService {
                 return;
             }
             if (tabla == Tabla.ESTADOS || tabla == Tabla.USUARIOS) {
-                refrescarCatalogos(tabla);
+                if (tabla == Tabla.ESTADOS) {
+                    progresoService.recargarEstados();
+                } else {
+                    progresoService.actualizarSupervisor(fila.path("id").asLong(0),
+                            texto(fila.path("nombre")), esBaja);
+                }
+                indice.refrescarCatalogos();
+                log.info("Catalogo de {} actualizado por CDC", tabla == Tabla.ESTADOS ? "estados" : "supervisores");
                 return;
             }
 
             String noContrato = esBaja ? null : resolverContrato(tabla, fila);
-            String afectado = aplicar(tabla, esBaja, noContrato, fila);
+            String afectado = aplicar(tabla, esBaja, "c".equals(operacion), noContrato, fila);
             if (afectado == null) {
                 return;
             }
@@ -152,7 +159,7 @@ public class CdcEventService {
      *
      * @return null cuando el evento no toca ningun contrato del resumen.
      */
-    private String aplicar(Tabla tabla, boolean esBaja, String noContrato, JsonNode fila) {
+    private String aplicar(Tabla tabla, boolean esBaja, boolean esAlta, String noContrato, JsonNode fila) {
         long id = fila.path("id").asLong(0);
         return switch (tabla) {
             case MAESTRO -> esBaja
@@ -164,13 +171,11 @@ public class CdcEventService {
             case INFORME -> esBaja
                     ? indice.aplicarBajaInforme(id)
                     : aplicarInforme(id, noContrato, fila);
-            // La agregacion de supervision (222.000 filas) no cabe en memoria: el contrato se anota y su
-            // ultimo registro se consulta una vez por ventana de publicacion. La baja escapa del mapeo
-            // porque la clave primaria no esta en ningun indice inverso; el proximo evento del contrato
-            // la refresca sola.
             case SUPERVISION -> {
-                indice.anotarSupervision(noContrato);
-                yield esBaja ? null : noContrato;
+                indice.aplicarEventoSupervision(noContrato, esAlta, esBaja,
+                        fila.hasNonNull("porcentaje_avance") ? (short) fila.path("porcentaje_avance").asInt() : null,
+                        numeroLargo(fila.path("id_supervisor")));
+                yield noContrato;
             }
             // Documentos, RAS y pagos no alimentan el resumen; solo se anuncian en vivo.
             default -> esBaja ? null : noContrato;
@@ -180,7 +185,8 @@ public class CdcEventService {
     private String aplicarMaestro(long id, String noContrato, JsonNode fila) {
         indice.aplicarMaestro(id, noContrato,
                 texto(fila.path("contratista")), texto(fila.path("dependencia")),
-                textoFecha(fila.path("fecha_inicio")), textoFecha(fila.path("fecha_fin")));
+                textoFecha(fila.path("fecha_inicio")), textoFecha(fila.path("fecha_fin")),
+                fila.path("valor_total").isNumber() ? fila.path("valor_total").decimalValue() : null);
         return noContrato;
     }
 
@@ -203,16 +209,6 @@ public class CdcEventService {
                 fila.path("requiere_secop").asBoolean(false),
                 fila.path("firmado").asBoolean(false)));
         return noContrato;
-    }
-
-    private void refrescarCatalogos(Tabla tabla) {
-        if (tabla == Tabla.ESTADOS) {
-            progresoService.recargarEstados();
-        } else {
-            progresoService.recargarSupervisores();
-        }
-        indice.refrescarCatalogos();
-        log.info("Catalogo de {} recargado por CDC", tabla == Tabla.ESTADOS ? "estados" : "supervisores");
     }
 
     /**
@@ -272,10 +268,12 @@ public class CdcEventService {
             notificacion.put("tipo", "CAMBIO_DETECTADO");
             notificacion.put("contrato", noContrato);
             notificacion.put("tabla", tabla.nombre);
+            notificacion.put("dependencia", dto.getDependencia());
             notificacion.put("timestamp", System.currentTimeMillis());
             notificacion.set("estado", estado);
 
-            webSocketHandler.broadcast(objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(notificacion));
+            webSocketHandler.broadcast(objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(notificacion),
+                    dto.getDependencia(), dto.getContratista(), noContrato);
         } catch (Exception e) {
             log.error("Error notificando via WebSocket", e);
         }

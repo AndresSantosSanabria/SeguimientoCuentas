@@ -8,10 +8,223 @@
       name="description"
       content="GE-COR — Panel de seguimiento de contratos y cuentas de cobro"
     />
+    <!-- Marca del aplicativo: pestana del navegador y pantallas de inicio -->
+    <link rel="icon" type="image/png" href="/img/logo.png" sizes="96x96" />
+    <link rel="apple-touch-icon" href="/img/logo.png" />
     <title>GE-COR · Seguimiento de contratos</title>
+    <style>
+      /* Pantalla de arranque: se pinta mientras el bundle carga y desaparece
+         en cuanto React monta (App.jsx). Sin dependencias externas. */
+      .boot {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 1.5rem;
+        overflow: hidden;
+        background-color: #f7fafd;
+        background-image:
+          radial-gradient(60rem 40rem at 15% 10%, rgba(31, 138, 232, 0.14), transparent 60%),
+          radial-gradient(50rem 36rem at 85% 90%, rgba(13, 43, 82, 0.12), transparent 62%);
+        opacity: 1;
+        transform: scale(1);
+        transition:
+          opacity 520ms cubic-bezier(0.4, 0, 0.2, 1),
+          transform 520ms cubic-bezier(0.4, 0, 0.2, 1),
+          filter 520ms cubic-bezier(0.4, 0, 0.2, 1);
+      }
+
+      /* Salida profesional: se desvanece y se aleja levemente. */
+      .boot--salida {
+        opacity: 0;
+        transform: scale(1.04);
+        filter: blur(6px);
+        pointer-events: none;
+      }
+
+      .boot-marca {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 1.25rem;
+      }
+
+      .boot-logo {
+        position: relative;
+        display: grid;
+        place-items: center;
+        width: 96px;
+        height: 96px;
+        border-radius: 24px;
+        background: linear-gradient(150deg, #ffffff 0%, #eef6ff 100%);
+        box-shadow:
+          0 24px 48px -18px rgba(13, 43, 82, 0.45),
+          0 0 0 1px rgba(255, 255, 255, 0.85),
+          0 0 0 6px rgba(31, 138, 232, 0.08);
+        animation: boot-flotar 3.2s ease-in-out infinite;
+      }
+
+      .boot-logo img {
+        width: 60px;
+        height: 60px;
+        object-fit: contain;
+      }
+
+      .boot-nombre {
+        margin: 0;
+        color: #0a1d52;
+        font-size: 20px;
+        font-weight: 700;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        text-indent: 0.22em;
+      }
+
+      .boot-lema {
+        margin: -0.75rem 0 0;
+        color: #62748e;
+        font-size: 12px;
+        font-weight: 500;
+        letter-spacing: 0.06em;
+      }
+
+      .boot-linea {
+        position: relative;
+        width: 220px;
+        height: 3px;
+        border-radius: 999px;
+        overflow: hidden;
+        background: rgba(202, 213, 226, 0.6);
+      }
+
+      .boot-linea::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        width: 45%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, #38c6e8, #146fc4);
+        animation: boot-barrido 1.4s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+      }
+
+      .boot-estado {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        margin: 0;
+        color: #45556c;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+      }
+
+      .boot-puntos {
+        display: inline-flex;
+        gap: 4px;
+      }
+
+      .boot-puntos span {
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: #146fc4;
+        animation: boot-latido 1.2s ease-in-out infinite;
+      }
+
+      .boot-puntos span:nth-child(2) {
+        animation-delay: 0.15s;
+      }
+
+      .boot-puntos span:nth-child(3) {
+        animation-delay: 0.3s;
+      }
+
+      @keyframes boot-barrido {
+        0% {
+          transform: translateX(-110%);
+        }
+        100% {
+          transform: translateX(240%);
+        }
+      }
+
+      @keyframes boot-latido {
+        0%,
+        100% {
+          opacity: 0.25;
+          transform: translateY(0);
+        }
+        50% {
+          opacity: 1;
+          transform: translateY(-2px);
+        }
+      }
+
+      @keyframes boot-flotar {
+        0%,
+        100% {
+          transform: translateY(0);
+        }
+        50% {
+          transform: translateY(-6px);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .boot-logo,
+        .boot-linea::after,
+        .boot-puntos span {
+          animation: none;
+        }
+
+        .boot {
+          transition: opacity 200ms linear;
+        }
+      }
+    </style>
   </head>
   <body>
+    <div class="boot" id="boot" role="status" aria-label="Cargando">
+      <div class="boot-marca">
+        <div class="boot-logo">
+          <img src="/img/logo.png" alt="" />
+        </div>
+        <h1 class="boot-nombre">GE-COR</h1>
+        <p class="boot-lema">Seguimiento de contratos y cuentas de cobro</p>
+      </div>
+      <div class="boot-linea" aria-hidden="true"></div>
+      <p class="boot-estado">
+        Cargando
+        <span class="boot-puntos" aria-hidden="true">
+          <span></span><span></span><span></span>
+        </span>
+      </p>
+    </div>
     <div id="root"></div>
+    <!-- Config runtime inyectada por el contenedor (deploy/app-entrypoint.sh).
+         En dev local sirve el placeholder de public/config.js. -->
+    <script src="/config.js"></script>
+    <!-- Red de seguridad: si el bundle no llega a montar, la pantalla de
+         arranque no puede quedarse tapando la pagina para siempre. -->
+    <script>
+      // Salida de la pantalla de arranque: se desvanece y se retira del DOM.
+      window.__ocultarArranque = function () {
+        var boot = document.getElementById('boot');
+        if (!boot || boot.dataset.salida === '1') return;
+        boot.dataset.salida = '1';
+        boot.classList.add('boot--salida');
+        var quitar = function () { boot.remove(); };
+        boot.addEventListener('transitionend', quitar, { once: true });
+        setTimeout(quitar, 800);
+      };
+      // Red de seguridad: si el bundle no llega a montar, la pantalla de
+      // arranque no puede quedarse tapando la pagina para siempre.
+      setTimeout(window.__ocultarArranque, 10000);
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
