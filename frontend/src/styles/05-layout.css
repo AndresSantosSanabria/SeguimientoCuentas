@@ -193,7 +193,7 @@
 
 .topbar-marca-titulo {
   display: block;
-  font-size: 15px;
+  font-size: 0.9375rem; /* 15px a raíz 16: escala con la pantalla pequeña */
   font-weight: var(--weight-semibold);
   letter-spacing: var(--tracking-marca);
   color: #ffffff;

@@ -51,6 +51,11 @@
 /* ---- cuadrícula de 12 columnas de los tableros ---- */
 .cuadricula-panel {
   display: grid;
+  /* Pista única recortada al contenedor: sin esto, por debajo de 1280
+     la pista implícita `auto` tiene piso de min-content y el SVG de
+     recharts desborda la página. A partir de 1280 manda la regla de
+     12 columnas más abajo. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 1.25rem;
 }
 
@@ -89,6 +94,10 @@
 /* ---- barra de filtros del explorador ---- */
 .filtros-grid {
   display: grid;
+  /* Igual que cuadricula-panel: recorta la pista implícita para que
+     ningún campo empuje la página fuera del viewport. A partir de 640
+     manda la regla de 2 columnas más abajo. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.75rem;
   padding: 1rem;
 }

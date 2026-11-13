@@ -1,0 +1,38 @@
+/* ============================================
+   RESPONSIVE · escala para pantallas pequeñas
+   Va al final de la cadena de @import: gana en cascada ante las
+   capas anteriores con igual especificidad. Solo usa max-width
+   (escala hacia abajo); los min-width de layout siguen mandando
+   donde ya existen. En pantallas ≥1440 no cambia nada.
+   ============================================ */
+
+/* ---- escala global de tipografía y espaciado ----
+   Todo el sistema de diseño vive en rem (tipografía, espaciado,
+   radios, tamaños de componente): bajar el font-size raíz reduce
+   todo proporcionalmente sin tocar una sola regla de componente.
+   Los rótulos pequeños que están en px (9–11px) no se mueven,
+   siguen legibles. Los breakpoints se declaran en orden
+   descendente para que el más estrecho quede al final y gane. */
+@media (max-width: 1440px) {
+  :root {
+    font-size: 15px; /* −6 % */
+  }
+}
+
+@media (max-width: 1366px) {
+  :root {
+    font-size: 14px; /* −12,5 % · laptops 1366×768 */
+  }
+}
+
+@media (max-width: 1100px) {
+  :root {
+    font-size: 13.5px; /* −15,6 % · ventanas medias y tablets */
+  }
+}
+
+@media (max-width: 640px) {
+  :root {
+    font-size: 13px; /* −18,8 % · móvil */
+  }
+}

@@ -23,11 +23,10 @@ import { useContratos } from '@/hooks/useContratos';
 import { fetchContratosSupervisados } from '@/api/contratos';
 import { useContractAnalytics } from '@/hooks/useContractAnalytics';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
-import { MESES, aniosDisponibles, buildCuentasSecretaria, contratoEnAnios, corteEfectivo, periodoFiltroLabel, secretariasDisponibles, } from '@/lib/cuentasSecretaria';
-import { ALCANCES, SITUACIONES, buildCuentasDetalle, descargarCuentasExcel } from '@/lib/cuentasExcel';
-import { ESTADO_GRUPOS } from '@/lib/estados';
+import { aniosDisponibles, buildCuentasSecretaria, contratoEnAnios, corteEfectivo, periodoFiltroLabel, secretariasDisponibles, } from '@/lib/cuentasSecretaria';
+import { buildCuentasDetalle, descargarCuentasExcel } from '@/lib/cuentasExcel';
 import { buildLeadTime, formatDuracion } from '@/lib/leadTime';
-import { ALCANCES_CUENTAS, contratosEnAlcance } from '@/lib/alcanceCuentas';
+import { ALCANCES_CUENTAS, contratoEnAlcance, contratosEnAlcance } from '@/lib/alcanceCuentas';
 import { descargarLeadTimeExcel } from '@/lib/leadTimeExcel';
 import { descargarSupervisoresExcel } from '@/lib/supervisoresExcel';
 import { buildContratosPorSupervisor } from '@/lib/supervisores';
@@ -56,20 +55,20 @@ export function AnaliticaPage() {
     const navigate = useNavigate();
     const hoy = useMemo(() => new Date(), []);
     const [aniosSeleccionados, setAniosSeleccionados] = useState([hoy.getFullYear()]);
-    const [mes, setMes] = useState(hoy.getMonth() + 1);
-    const [mesHasta, setMesHasta] = useState('');
-    const [desdeFecha, setDesdeFecha] = useState('');
-    const [hastaFecha, setHastaFecha] = useState('');
+    const [mes] = useState('todos');
+    const [mesHasta] = useState('');
+    const [desdeFecha] = useState('');
+    const [hastaFecha] = useState('');
     const [exportando, setExportando] = useState(false);
     const [exportandoSupervisor, setExportandoSupervisor] = useState(false);
     const [exportandoLead, setExportandoLead] = useState(false);
     const [alcanceCuentas, setAlcanceCuentas] = useState('curso');
-    const [secretarias, setSecretarias] = useState([]);
-    const [situacion, setSituacion] = useState('todas');
-    const [alcance, setAlcance] = useState('corte');
-    const [estadoGrupo, setEstadoGrupo] = useState('todos');
-    const [textoCuenta, setTextoCuenta] = useState('');
-    const [soloDeuda, setSoloDeuda] = useState(true);
+    const [secretarias] = useState([]);
+    const [situacion] = useState('todas');
+    const [alcance] = useState('corte');
+    const [estadoGrupo] = useState('todos');
+    const [textoCuenta] = useState('');
+    const [soloDeuda] = useState(false);
     const [secretariasSupervisor, setSecretariasSupervisor] = useState([]);
     const [busquedaSupervisor, setBusquedaSupervisor] = useState('');
     const [limiteSupervisores, setLimiteSupervisores] = useState('12');
@@ -83,7 +82,6 @@ export function AnaliticaPage() {
     const contratosVisibles = useMemo(() => contratosEnAlcance(contratosFiltrados, alcanceCuentas), [contratosFiltrados, alcanceCuentas]);
     const analytics = useContractAnalytics(data ? contratosVisibles : null);
     const anio = aniosSeleccionados.length ? Math.max(...aniosSeleccionados) : hoy.getFullYear();
-    const rangoActivo = Boolean(desdeFecha || hastaFecha);
     const filtrosCuentas = useMemo(() => ({ anio, anios: aniosSeleccionados, mes, mesHasta, desdeFecha, hastaFecha, secretarias, situacion, alcance, soloDeuda, estado: estadoGrupo, texto: textoCuentaFiltrado, }), [anio, aniosSeleccionados, mes, mesHasta, desdeFecha, hastaFecha, secretarias, situacion, alcance, soloDeuda, estadoGrupo, textoCuentaFiltrado]);
     const cuentasSecretaria = useMemo(() => buildCuentasSecretaria(contratosVisibles, filtrosCuentas, hoy), [contratosVisibles, filtrosCuentas, hoy]);
     const detalleCuentas = useMemo(() => (data ? buildCuentasDetalle(contratosVisibles, filtrosCuentas, hoy) : []), [data, contratosVisibles, filtrosCuentas, hoy]);
@@ -223,100 +221,8 @@ export function AnaliticaPage() {
             </p>}>
           <div className="pila-bloque">
             <div className="filtro-fila">
-              <label className="campo-filtro" title="Fecha inicial del rango de calendario; filtra por el período de la cuota con precisión de día.">
-                <span className="field-label-corto">
-                  Desde
-                </span>
-                <input type="date" className="input input-corto input-fecha" value={desdeFecha} onChange={(event) => setDesdeFecha(event.target.value)} aria-label="Filtrar cuotas desde la fecha"/>
-              </label>
 
-              <label className="campo-filtro" title="Fecha final del rango; también es la fecha de corte: solo cuentan como pendientes las cuotas ya vencidas a ese día.">
-                <span className="field-label-corto">
-                  Hasta (día)
-                </span>
-                <input type="date" className="input input-corto input-fecha" value={hastaFecha} onChange={(event) => setHastaFecha(event.target.value)} aria-label="Filtrar cuotas hasta la fecha"/>
-              </label>
-
-              {rangoActivo ? (<button type="button" className="btn btn-ghost btn-limpiar-rango" onClick={() => { setDesdeFecha(''); setHastaFecha(''); }} title="Quitar el rango de fechas y volver a los selectores de año y mes">
-                  Quitar rango
-                </button>) : null}
-
-              <label className="campo-filtro">
-                <span className="field-label-corto">
-                  Mes
-                </span>
-                <select className="input input-corto input-mes" value={String(mes)} onChange={(event) => setMes(event.target.value === 'todos' ? 'todos' : Number(event.target.value))} disabled={rangoActivo} aria-label="Filtrar por mes">
-                  <option value="todos">Todos</option>
-                  {MESES.map((nombre, index) => (<option key={nombre} value={index + 1}>
-                      {nombre}
-                    </option>))}
-                </select>
-              </label>
-
-              <label className="campo-filtro" title={rangoActivo ? 'Desactivado mientras el rango de fechas esté puesto' : 'Mes final del rango; déjalo en «—» para un solo mes (o el año completo si Mes = Todos)'}>
-                <span className="field-label-corto">
-                  Hasta
-                </span>
-                <select className="input input-corto input-mes-hasta" value={String(mesHasta)} onChange={(event) => setMesHasta(event.target.value === '' ? '' : Number(event.target.value))} disabled={rangoActivo} aria-label="Filtrar hasta el mes (rango opcional de meses)">
-                  <option value="">—</option>
-                  {MESES.map((nombre, index) => (<option key={nombre} value={index + 1}>
-                      {nombre}
-                    </option>))}
-                </select>
-              </label>
-
-              <SelectorSecretarias opciones={opcionesSecretaria} valor={secretarias} onChange={setSecretarias} etiqueta="Secretarías" />
-
-              <label className="campo-filtro">
-                <span className="field-label-corto">
-                  Situación
-                </span>
-                <select className="input input-corto input-situacion" value={situacion} onChange={(event) => setSituacion(event.target.value)} aria-label="Filtrar cuentas por situación">
-                  {SITUACIONES.map((opcion) => (<option key={opcion.valor} value={opcion.valor}>
-                      {opcion.label}
-                    </option>))}
-                </select>
-              </label>
-
-              <label className="campo-filtro" title={rangoActivo ? 'El rango de fechas ya define el alcance; desactivado mientras está puesto.' : 'Todo lo vencido hasta la fecha de corte reproduce el mismo total que mide el gráfico; el período solo toma las cuotas de los meses elegidos.'}>
-                <span className="field-label-corto">
-                  Alcance
-                </span>
-                <select className="input input-corto input-alcance" value={alcance} onChange={(event) => setAlcance(event.target.value)} disabled={rangoActivo} aria-label="Alcance del archivo Excel">
-                  {ALCANCES.map((opcion) => (<option key={opcion.valor} value={opcion.valor}>
-                      {opcion.label}
-                    </option>))}
-                </select>
-              </label>
-
-              <label className="campo-filtro">
-                <span className="field-label-corto">
-                  Estado del contrato
-                </span>
-                <select className="input input-corto input-grupo-estado" value={estadoGrupo} onChange={(event) => setEstadoGrupo(event.target.value)} aria-label="Filtrar por estado del contrato">
-                  <option value="todos">Todos</option>
-                  {ESTADO_GRUPOS.map((opcion) => (<option key={opcion.valor} value={opcion.valor}>
-                      {opcion.label}
-                    </option>))}
-                </select>
-              </label>
-
-              <label className="campo-filtro">
-                <span className="field-label-corto">
-                  Buscar contrato o supervisor
-                </span>
-                <span className="busqueda-listado">
-                  <Search className="input-icono"/>
-                  <input className="input input-corto input-con-icono" value={textoCuenta} onChange={(event) => setTextoCuenta(event.target.value)} placeholder="STD-CD-…" aria-label="Buscar por contrato, contratista o supervisor"/>
-                </span>
-              </label>
-
-              <label className="campo-check" title="Solo afecta al gráfico: oculta las secretarías sin cuentas pendientes.">
-                <input type="checkbox" className="campo-check-input" checked={soloDeuda} onChange={(event) => setSoloDeuda(event.target.checked)}/>
-                Solo con deuda
-              </label>
-
-              {puede('CONTRATOS_EXPORTAR') ? (<button type="button" className="btn btn-primary filtro-accion" onClick={descargarCuentas} disabled={exportando || detalleCuentas.length === 0} title="Excel con una fila por cuota del contrato: las radicadas con su período, estado y siguiente paso reales, y las pendientes sin radicar. Respeta secretarías, el rango de fechas (o el período en meses), situación, estado y búsqueda.">
+              {puede('CONTRATOS_EXPORTAR') ? (<button type="button" className="btn btn-primary filtro-accion" onClick={descargarCuentas} disabled={exportando || detalleCuentas.length === 0} title="Excel con una fila por cuota del contrato: las radicadas con su período, estado y siguiente paso reales, y las pendientes sin radicar.">
                 <Download/>
                 {exportando ? 'Generando…' : 'Descargar Excel'}
                 <span className="btn-contador">
@@ -326,10 +232,7 @@ export function AnaliticaPage() {
             </div>
 
             {detalleCuentas.length > 8000 ? (<p className="nota-volumen">
-                Son {formatNumber(detalleCuentas.length)} filas, una por cuota {rangoActivo ? 'del rango de fechas' : alcance === 'corte' ? 'vencida hasta el corte' : 'del período elegido'}.
-                {rangoActivo
-                    ? ' Acorta «Desde» y «Hasta» o restringe la secretaría y el estado del contrato para un archivo más liviano.'
-                    : `${alcance === 'corte' ? ' Cambia el alcance a «Solo las cuotas del período» o' : ''} acota el mes, la secretaría o el estado del contrato para un archivo más liviano.`}
+                Son {formatNumber(detalleCuentas.length)} filas, una por cuota vencida hasta el corte.
                 {detalleCuentas.length > 100000 ? ' Con este volumen el archivo puede tardar más de un minuto en armarse.' : ''}
               </p>) : null}
 
@@ -338,7 +241,7 @@ export function AnaliticaPage() {
                   Sin cuentas pendientes en el período
                 </p>
                 <p className="caja-vacia-detalle">
-                  Ajusta el rango de fechas, el año, el mes o la secretaría; también puedes desmarcar «Solo con deuda».
+                  Ajusta el año de analítica o el alcance de cuentas (En curso, Cerradas o Ambas) de la barra superior.
                 </p>
               </div>)}
           </div>

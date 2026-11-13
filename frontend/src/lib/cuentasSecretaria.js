@@ -32,8 +32,12 @@ export function contratoEnAnios(contrato, anios) {
     if (!Array.isArray(anios) || anios.length === 0) return true;
     const inicio = parseDateOnly(contrato.fechaInicio);
     const fin = parseDateOnly(contrato.fechaFin) ?? inicio;
-    if (!inicio || !fin || fin < inicio) return false;
-    return anios.some((anio) => anio >= inicio.getFullYear() && anio <= fin.getFullYear());
+    if (!inicio || !fin) return false;
+    // SupervisA puede traer fecha_fin anterior a la de inicio (dato mal capturado):
+    // el contrato existe y arrancó ese día, así que se toma el inicio como referencia
+    // en vez de borrarlo en silencio de toda la analítica.
+    const hasta = fin < inicio ? inicio : fin;
+    return anios.some((anio) => anio >= inicio.getFullYear() && anio <= hasta.getFullYear());
 }
 export function secretariasDisponibles(contratos) {
     const labels = new Set();

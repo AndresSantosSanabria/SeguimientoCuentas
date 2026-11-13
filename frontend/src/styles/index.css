@@ -1,7 +1,7 @@
 /* ============================================
    HOJA DE ESTILOS · CSS puro, sin framework.
    El orden de importación ES el orden de cascada:
-   tokens → reset → primitivas → tonos → layout → componentes → páginas.
+   tokens → reset → primitivas → tonos → layout → componentes → páginas → responsive.
    Nunca se usa !important ni @layer: una regla que va después gana
    cuando ambas tienen la misma especificidad.
 
@@ -22,3 +22,4 @@
 @import url(./07-pages.css);
 @import url(./08-mapa-vivo.css);
 @import url(./09-avance-burbuja.css);
+@import url(./10-responsive.css);
