@@ -1,10 +1,12 @@
 import { FileText } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Badge } from '@/components/ui/Badge';
+import { BurbujaAvance } from '@/components/ui/BurbujaAvance';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { EstadoBadge } from '@/components/ui/EstadoBadge';
 import { FlujoCuentaDiagrama } from '@/components/FlujoCuentaDiagrama';
+import { avanceDeCuenta } from '@/lib/avanceCuenta';
 import { formatDate, formatDateTime } from '@/lib/format';
 import { ESTADO_APROBADO, estadoLabel } from '@/lib/estados';
 
@@ -41,6 +43,15 @@ export function FlujoCuenta({ cuentas }) {
       },
     ];
   }, [cuenta]);
+
+  const avance = useMemo(() => avanceDeCuenta(cuenta, pasos), [cuenta, pasos]);
+  const tonoAvance = avance.cerrado
+    ? 'success'
+    : avance.devuelta
+      ? 'warning'
+      : avance.pct >= 50
+        ? 'success'
+        : 'brand';
 
   useEffect(() => {
     setSelectedId(null);
@@ -118,6 +129,17 @@ export function FlujoCuenta({ cuentas }) {
               <span className="flujo-meta-periodo-leyenda">Periodo:</span>{' '}
               {formatDate(cuenta.fechaInicio)} – {formatDate(cuenta.fechaFin)}
             </p>
+
+            <div className="flujo-avance">
+              <BurbujaAvance pct={avance.pct} tono={tonoAvance} size={84} />
+              <div className="flujo-avance-texto">
+                <p className="micro-label">Avance de la cuenta</p>
+                <p className="flujo-avance-hito">{avance.hitoActual}</p>
+                <p className="flujo-avance-contador">
+                  {avance.etapas} de {avance.total} etapas del recorrido
+                </p>
+              </div>
+            </div>
           </div>
 
           <FlujoCuentaDiagrama pasos={pasos} enTramite={cuenta.activa !== false} />

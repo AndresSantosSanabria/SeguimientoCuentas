@@ -1,2 +1,6 @@
 mvnw text eol=lf
 *.cmd text eol=crlf
+# Los contenedores son Linux: un .sh con CRLF rompe el shebang (#!/bin/sh\r).
+# Se fuerza LF en todo lo que corre dentro de un contenedor.
+*.sh text eol=lf
+deploy/** text eol=lf

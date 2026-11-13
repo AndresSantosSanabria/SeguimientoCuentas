@@ -1,4 +1,4 @@
-import { ArrowUpRight, ClipboardCheck, ClipboardList, Download, FileCheck2, Radio, RefreshCw, Search, TrendingUp, Users, Wifi, WifiOff, } from 'lucide-react';
+import { ArrowUpRight, ClipboardCheck, ClipboardList, Download, FileCheck2, Search, TrendingUp, Users, } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
@@ -7,7 +7,7 @@ import { CUENTAS_COLORS, CuentasSecretariaBars } from '@/components/charts/Cuent
 import { SupervisorBars } from '@/components/charts/SupervisorBars';
 import { SupervisorContratosModal } from '@/components/SupervisorContratosModal';
 import { EstadoCuentasDonut } from '@/components/charts/EstadoCuentasDonut';
-import { Badge } from '@/components/ui/Badge';
+import { LeadTimeBarras } from '@/components/charts/LeadTimeBarras';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ErrorState } from '@/components/ui/ErrorState';
@@ -19,7 +19,6 @@ import { SelectorSecretarias } from '@/components/ui/SelectorSecretarias';
 import { SelectorAnios } from '@/components/ui/SelectorAnios';
 import { ChartSkeleton, KpiSkeleton } from '@/components/ui/Skeletons';
 import { useAuth } from '@/context/AuthContext';
-import { useCdc } from '@/hooks/useCdc';
 import { useContratos } from '@/hooks/useContratos';
 import { fetchContratosSupervisados } from '@/api/contratos';
 import { useContractAnalytics } from '@/hooks/useContractAnalytics';
@@ -27,32 +26,12 @@ import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { MESES, aniosDisponibles, buildCuentasSecretaria, contratoEnAnios, corteEfectivo, periodoFiltroLabel, secretariasDisponibles, } from '@/lib/cuentasSecretaria';
 import { ALCANCES, SITUACIONES, buildCuentasDetalle, descargarCuentasExcel } from '@/lib/cuentasExcel';
 import { ESTADO_GRUPOS } from '@/lib/estados';
+import { buildLeadTime, formatDuracion } from '@/lib/leadTime';
+import { ALCANCES_CUENTAS, contratosEnAlcance } from '@/lib/alcanceCuentas';
+import { descargarLeadTimeExcel } from '@/lib/leadTimeExcel';
 import { descargarSupervisoresExcel } from '@/lib/supervisoresExcel';
 import { buildContratosPorSupervisor } from '@/lib/supervisores';
-import { formatDate, formatDateTime, formatNumber, formatPercent, formatRelativeTime, normalizar, truncate, } from '@/lib/format';
-const ETIQUETAS_ESTATUS = {
-    connected: {
-        label: 'Analítica en vivo',
-        description: 'Los indicadores se recalculan con cada evento que Debezium transmite desde PostgreSQL.',
-        icon: Wifi,
-        tone: 'success',
-        badge: 'Escuchando',
-    },
-    connecting: {
-        label: 'Conectando con el flujo CDC',
-        description: 'Estableciendo la conexión WebSocket con el backend.',
-        icon: Radio,
-        tone: 'warning',
-        badge: 'Conectando',
-    },
-    disconnected: {
-        label: 'Analítica sin señal CDC',
-        description: 'Los indicadores muestran la última carga de /api/contratos; se reintentará la conexión automáticamente.',
-        icon: WifiOff,
-        tone: 'danger',
-        badge: 'Desconectado',
-    },
-};
+import { formatDate, formatNumber, formatPercent, normalizar, truncate, } from '@/lib/format';
 function CuentasLegend() {
     return (<div className="leyenda-cuentas">
       <span className="leyenda-item">
@@ -67,7 +46,6 @@ function CuentasLegend() {
 }
 export function AnaliticaPage() {
     const { data, isLoading, isError, refetch } = useContratos();
-    const { status, url, events, lastEvent, reconnect } = useCdc();
     const { puede, rol, secretarias: secretariasSesion } = useAuth();
     const contratosSupervisadosQuery = useQuery({
         queryKey: ['contratos', 'supervisados'],
@@ -84,6 +62,8 @@ export function AnaliticaPage() {
     const [hastaFecha, setHastaFecha] = useState('');
     const [exportando, setExportando] = useState(false);
     const [exportandoSupervisor, setExportandoSupervisor] = useState(false);
+    const [exportandoLead, setExportandoLead] = useState(false);
+    const [alcanceCuentas, setAlcanceCuentas] = useState('curso');
     const [secretarias, setSecretarias] = useState([]);
     const [situacion, setSituacion] = useState('todas');
     const [alcance, setAlcance] = useState('corte');
@@ -99,30 +79,32 @@ export function AnaliticaPage() {
     const opcionesAnio = useMemo(() => [...new Set([hoy.getFullYear(), ...(data ? aniosDisponibles(data) : [])])].sort((a, b) => b - a), [data, hoy]);
     const opcionesSecretaria = useMemo(() => (data ? secretariasDisponibles(data) : []), [data]);
     const contratosFiltrados = useMemo(() => (data ?? []).filter((contrato) => contratoEnAnios(contrato, aniosSeleccionados)), [data, aniosSeleccionados]);
-    const analytics = useContractAnalytics(data ? contratosFiltrados : null);
+    // El alcance de cuentas recorta el universo que se mide en toda la página.
+    const contratosVisibles = useMemo(() => contratosEnAlcance(contratosFiltrados, alcanceCuentas), [contratosFiltrados, alcanceCuentas]);
+    const analytics = useContractAnalytics(data ? contratosVisibles : null);
     const anio = aniosSeleccionados.length ? Math.max(...aniosSeleccionados) : hoy.getFullYear();
     const rangoActivo = Boolean(desdeFecha || hastaFecha);
     const filtrosCuentas = useMemo(() => ({ anio, anios: aniosSeleccionados, mes, mesHasta, desdeFecha, hastaFecha, secretarias, situacion, alcance, soloDeuda, estado: estadoGrupo, texto: textoCuentaFiltrado, }), [anio, aniosSeleccionados, mes, mesHasta, desdeFecha, hastaFecha, secretarias, situacion, alcance, soloDeuda, estadoGrupo, textoCuentaFiltrado]);
-    const cuentasSecretaria = useMemo(() => buildCuentasSecretaria(contratosFiltrados, filtrosCuentas, hoy), [contratosFiltrados, filtrosCuentas, hoy]);
-    const detalleCuentas = useMemo(() => (data ? buildCuentasDetalle(contratosFiltrados, filtrosCuentas, hoy) : []), [data, contratosFiltrados, filtrosCuentas, hoy]);
+    const cuentasSecretaria = useMemo(() => buildCuentasSecretaria(contratosVisibles, filtrosCuentas, hoy), [contratosVisibles, filtrosCuentas, hoy]);
+    const detalleCuentas = useMemo(() => (data ? buildCuentasDetalle(contratosVisibles, filtrosCuentas, hoy) : []), [data, contratosVisibles, filtrosCuentas, hoy]);
     const descargarCuentas = async () => {
         if (!data || exportando || detalleCuentas.length === 0)
             return;
         setExportando(true);
         try {
-            await descargarCuentasExcel(contratosFiltrados, filtrosCuentas, hoy);
+            await descargarCuentasExcel(contratosVisibles, filtrosCuentas, hoy);
         }
         finally {
             setExportando(false);
         }
     };
     const topeSupervisores = limiteSupervisores === 'todos' ? Number.POSITIVE_INFINITY : Number(limiteSupervisores);
-    const contratosPorSupervisor = useMemo(() => buildContratosPorSupervisor(contratosFiltrados, {
+    const contratosPorSupervisor = useMemo(() => buildContratosPorSupervisor(contratosVisibles, {
         secretarias: secretariasSupervisor,
         busqueda: supervisorFiltrado,
         limite: topeSupervisores,
         limiteBusqueda: topeSupervisores,
-    }), [contratosFiltrados, secretariasSupervisor, supervisorFiltrado, topeSupervisores]);
+    }), [contratosVisibles, secretariasSupervisor, supervisorFiltrado, topeSupervisores]);
     const detalleSupervisor = useMemo(() => {
         if (!supervisorSeleccionado || rol?.codigo !== 'ENLACE') return supervisorSeleccionado;
         const permitidas = new Set(secretariasSesion.map(normalizar));
@@ -131,7 +113,7 @@ export function AnaliticaPage() {
             .filter((item) => normalizar(item.supervisor) === normalizar(supervisorSeleccionado.label))
             .map((item) => item.contrato)
             .filter((item) => !permitidas.has(normalizar(item.dependencia)) && !existentes.has(item.noContrato)
-                && contratoEnAnios(item, aniosSeleccionados));
+                && contratoEnAnios(item, aniosSeleccionados) && contratoEnAlcance(item, alcanceCuentas));
         if (!adicionales.length) return supervisorSeleccionado;
         return {
             ...supervisorSeleccionado,
@@ -140,7 +122,7 @@ export function AnaliticaPage() {
             represadas: supervisorSeleccionado.represadas + adicionales.reduce((sum, item) => sum + (item.cuentasEnMora ?? 0), 0),
             contratos: [...supervisorSeleccionado.contratos, ...adicionales],
         };
-    }, [supervisorSeleccionado, rol, secretariasSesion, contratosSupervisadosQuery.data, aniosSeleccionados]);
+    }, [supervisorSeleccionado, rol, secretariasSesion, contratosSupervisadosQuery.data, aniosSeleccionados, alcanceCuentas]);
     const descargarSupervisores = async () => {
         if (exportandoSupervisor || contratosPorSupervisor.coincidencias.length === 0)
             return;
@@ -154,32 +136,34 @@ export function AnaliticaPage() {
     };
     const corte = corteEfectivo(filtrosCuentas, hoy);
     const corteLabel = formatDate(`${corte.getFullYear()}-${String(corte.getMonth() + 1).padStart(2, '0')}-${String(corte.getDate()).padStart(2, '0')}`);
-    const cambiosRecientes = useMemo(() => events.slice(0, 8), [events]);
-    const contratosEnFlujo = useMemo(() => new Set(events.map((event) => event.contrato)).size, [events]);
-    const contratosAplicados = useMemo(() => {
-        if (!data)
-            return 0;
-        const conocidos = new Set(data.map((contrato) => contrato.noContrato));
-        return new Set(events
-            .filter((event) => conocidos.has(event.contrato))
-            .map((event) => event.contrato)).size;
-    }, [data, events]);
+    const leadTime = useMemo(() => buildLeadTime(contratosVisibles, alcanceCuentas, hoy), [contratosVisibles, alcanceCuentas, hoy]);
+    const descargarLeadTime = async () => {
+        if (exportandoLead || leadTime.rows.length === 0)
+            return;
+        setExportandoLead(true);
+        try {
+            await descargarLeadTimeExcel(leadTime, alcanceCuentas, hoy);
+        }
+        finally {
+            setExportandoLead(false);
+        }
+    };
     const menorAvance = useMemo(() => {
         if (!data)
             return [];
-        return [...contratosFiltrados]
+        return [...contratosVisibles]
             .filter((contrato) => contrato.totalSupervisiones > 0)
             .sort((a, b) => (a.avanceDeclarado ?? 0) - (b.avanceDeclarado ?? 0))
             .slice(0, 10);
-    }, [contratosFiltrados]);
+    }, [contratosVisibles]);
     const informesPendientes = useMemo(() => {
         if (!data)
             return [];
-        return contratosFiltrados
+        return contratosVisibles
             .filter((contrato) => contrato.totalSupervisiones > 0 && !contrato.informeCargado)
             .sort((a, b) => b.porcentajeAvance - a.porcentajeAvance)
             .slice(0, 10);
-    }, [contratosFiltrados]);
+    }, [contratosVisibles]);
     if (isLoading) {
         return (<div className="pila-pagina-amplia">
           <PageHeader eyebrow="Analítica" title="Analítica" description="Consolidando la información de contratos…"/>
@@ -199,87 +183,21 @@ export function AnaliticaPage() {
         </div>);
     }
     const { supervision, kpis, estadoCuentas } = analytics;
-    const info = ETIQUETAS_ESTATUS[status];
-    const StatusIcon = info.icon;
     const informesPct = kpis.totalContratos > 0 ? (kpis.informesCargados / kpis.totalContratos) * 100 : 0;
     return (<div className="pila-pagina-amplia">
-      <PageHeader eyebrow="Analítica en vivo" title="Analítica" description="Indicadores calculados en el navegador sobre /api/contratos y actualizados al instante por el flujo PostgreSQL → Debezium → WebSocket." actions={<>
-            <Link to="/tiempo-real" className="btn btn-ghost">
-              Abrir monitor CDC
-              <ArrowUpRight/>
-            </Link>
-            <Link to="/contratos?alerta=sin-informe" className="btn btn-primary">
-              Ver informes pendientes
-              <ArrowUpRight/>
-            </Link>
-          </>}/>
-
-      <Card tone={info.tone} className="card-tono">
-        <div className="banner-cuerpo">
-          <span data-tone={info.tone} className="icono-globo icono-globo-banner">
-            <StatusIcon className={status === 'connecting' ? 'parpadeo' : undefined}/>
-          </span>
-          <div className="banner-texto">
-            <p className="banner-titulo">{info.label}</p>
-            <p className="banner-detalle">{info.description}</p>
-          </div>
-          <div className="banner-stats">
-            <div>
-              <p className="micro-label">
-                Eventos
-              </p>
-              <p className="banner-dato-valor">
-                {formatNumber(events.length)}
-              </p>
-            </div>
-            <div>
-              <p className="micro-label">
-                Contratos en el flujo
-              </p>
-              <p className="banner-dato-valor">
-                {formatNumber(contratosEnFlujo)}
-              </p>
-            </div>
-            <div>
-              <p className="micro-label">
-                Aplicados al tablero
-              </p>
-              <p className="banner-dato-valor">
-                {formatNumber(contratosAplicados)}
-              </p>
-            </div>
-            <div>
-              <p className="micro-label">
-                Último evento
-              </p>
-              <p className="banner-dato-texto">
-                {lastEvent ? formatRelativeTime(lastEvent.timestamp) : '—'}
-              </p>
-            </div>
-            <Badge tone={info.tone} dot>
-              {info.badge}
-            </Badge>
-            <button type="button" className="btn btn-ghost" onClick={reconnect} title="Reconectar el WebSocket CDC">
-              <RefreshCw/>
-              Reconectar
-            </button>
-          </div>
-        </div>
-        <div className="banner-flujo">
-          <span>PostgreSQL</span>
-          <span aria-hidden="true">→</span>
-          <span>Debezium</span>
-          <span aria-hidden="true">→</span>
-          <span>WebSocket</span>
-          <code className="banner-url">{url}</code>
-          <span aria-hidden="true">→</span>
-          <span>Indicadores de esta página</span>
-        </div>
-      </Card>
-
       <div className="filtro-fila filtro-fila-periodo-global">
         <SelectorAnios opciones={opcionesAnio} valor={aniosSeleccionados} onChange={setAniosSeleccionados} anioActual={hoy.getFullYear()} etiqueta="Años de analítica" />
-        <span className="texto-apoyo">Este filtro aplica a todos los indicadores, gráficas y tablas de esta página.</span>
+        <label className="campo-filtro" title="«En curso» (por defecto) mide solo las cuentas que siguen abiertas; «Cerradas» solo las ya cerradas (estado 19); «Ambas» une los dos universos. Cambia el universo de cuentas de toda la página.">
+          <span className="field-label-corto">
+            Cuentas
+          </span>
+          <select className="input input-corto" value={alcanceCuentas} onChange={(event) => setAlcanceCuentas(event.target.value)} aria-label="Alcance de cuentas de la analítica">
+            {ALCANCES_CUENTAS.map((opcion) => (<option key={opcion.valor} value={opcion.valor}>
+                {opcion.label}
+              </option>))}
+          </select>
+        </label>
+        <span className="texto-apoyo">Estos filtros aplican a todos los indicadores, gráficas y tablas de esta página.</span>
       </div>
 
       <div className="kpi-cuadricula kpi-cuadricula-seis">
@@ -494,45 +412,22 @@ export function AnaliticaPage() {
       </div>
 
       <div className="cuadricula-panel">
-        <Card className="celda-col-media">
-          <CardHeader title="Cambios aplicados en vivo" subtitle="Últimos eventos CDC que actualizaron los indicadores de esta página." action={<Link to="/tiempo-real" className="link link-inline">
-                Ver monitor
-                <ArrowUpRight/>
-              </Link>}/>
-          {cambiosRecientes.length === 0 ? (<EmptyState icon={Radio} title="Esperando cambios de PostgreSQL" description="Cuando Debezium detecte un cambio en contratos, supervisiones o informes, aparecerá aquí y los indicadores se actualizarán."/>) : (<div className="deslizable-x">
-              <table className="tabla-listado tabla-listado-medio">
-                <thead>
-                  <tr>
-                    <th className="table-th">Contrato</th>
-                    <th className="table-th">Origen</th>
-                    <th className="table-th">Estado</th>
-                    <th className="table-th table-th-derecha">Momento</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {cambiosRecientes.map((event, index) => (<tr key={`${event.contrato}-${event.timestamp}-${index}`} className="table-row" onClick={() => navigate(`/contratos/${encodeURIComponent(event.contrato)}`)}>
-                      <td className="table-td sin-ajuste celda-titulo">
-                        <Link to={`/contratos/${encodeURIComponent(event.contrato)}`} className="link" onClick={(clickEvent) => clickEvent.stopPropagation()}>
-                          {event.contrato}
-                        </Link>
-                      </td>
-                      <td className="table-td">
-                        <div className="celda-mixta">
-                          <Badge tone="info">{event.tipo}</Badge>
-                          <span className="texto-apoyo">{event.tabla}</span>
-                        </div>
-                      </td>
-                      <td className="table-td celda-estado">
-                        <EstadoBadge id={event.estado.id_estado} label={event.estado.estado}/>
-                      </td>
-                      <td className="table-td celda-momento" title={formatDateTime(event.timestamp)}>
-                        {formatRelativeTime(event.timestamp)}
-                      </td>
-                    </tr>))}
-                </tbody>
-              </table>
-            </div>)}
-        </Card>
+        <ChartCard className="celda-col-media" title="Desglose del Lead Time por Proceso y Etapa" subtitle="Cada barra es el tiempo total de un bloque (área), repartido en etapas con valor (procesamiento y entrega) y tiempos muertos (aprobación y espera)." action={puede('CONTRATOS_EXPORTAR') ? (<button type="button" className="btn btn-primary" onClick={descargarLeadTime} disabled={exportandoLead || leadTime.rows.length === 0} title="Excel con la tabla del diagrama (fórmulas dinámicas contra la hoja Datos) y un renglón por cada tramo de tiempo de cada cuenta, para ver el porqué de cada cifra.">
+            <Download/>
+            {exportandoLead ? 'Generando…' : 'Descargar Excel'}
+          </button>) : null} footer={leadTime.rows.length > 0 ? (<p className="pie-analitico">
+              <span className="pie-analitico-cifra">
+                {formatDuracion(leadTime.totales.total)}
+              </span>{' '}
+              de Lead Time acumulado ·{' '}
+              <span className="dato-cifra-alerta">
+                {formatPercent(leadTime.totales.total > 0 ? (leadTime.totales.muertos / leadTime.totales.total) * 100 : 0, 1)}
+              </span>{' '}
+              de tiempo muerto (aprobación y cola) ·{' '}
+              {formatNumber(leadTime.cuentas)} {leadTime.cuentas === 1 ? 'cuenta' : 'cuentas'} · {formatNumber(leadTime.detalle.length)} {leadTime.detalle.length === 1 ? 'tramo' : 'tramos'} de tiempo.
+            </p>) : null}>
+          {leadTime.rows.length > 0 ? (<LeadTimeBarras data={leadTime.rows} height={Math.max(300, leadTime.rows.length * 46 + 60)}/>) : (<EmptyState icon={TrendingUp} title="Sin cuentas en este alcance" description="Cambia el filtro de Cuentas de arriba a «Ambas» o amplía el filtro de años para ver el desglose."/>)}
+        </ChartCard>
 
         <Card className="celda-col-larga">
           <CardHeader title="Informes pendientes" subtitle="Contratos con supervisión registrada pero sin informe cargado." action={<Link to="/contratos?alerta=sin-informe" className="link link-inline">

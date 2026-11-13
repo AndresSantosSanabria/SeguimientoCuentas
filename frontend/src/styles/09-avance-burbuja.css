@@ -1,0 +1,203 @@
+/* ============================================
+   BURBUJA DE AVANCE DE LA CUENTA
+   Relleno liquido en SVG: el nivel sube al %,
+   dos olas cruzan en bucle, burbujas ascienden
+   dentro del agua y el anillo repite el avance.
+   El tono se declara en el JSX con data-tono y
+   aqui solo se lee.
+   ============================================ */
+
+.burbuja-avance {
+  --burbuja-color: var(--brand-500);
+  --burbuja-agua: color-mix(in srgb, var(--burbuja-color) 80%, #ffffff);
+  --burbuja-agua-claro: color-mix(in srgb, var(--burbuja-color) 42%, #ffffff);
+  flex: none;
+  inline-size: 88px;
+  block-size: 88px;
+}
+
+.burbuja-avance[data-tono='success'] {
+  --burbuja-color: var(--emerald-500);
+}
+
+.burbuja-avance[data-tono='warning'] {
+  --burbuja-color: var(--amber-500);
+}
+
+.burbuja-avance[data-tono='danger'] {
+  --burbuja-color: var(--rose-500);
+}
+
+.burbuja-avance > svg {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+  overflow: visible;
+}
+
+/* Disco de fondo del agua */
+.burbuja-avance-pista {
+  fill: var(--slate-100);
+}
+
+/* El nivel transiciona cuando cambia el % */
+.burbuja-avance-nivel {
+  transition: transform 900ms cubic-bezier(0.33, 1, 0.68, 1);
+  will-change: transform;
+}
+
+/* Dos olas del mismo seno, desfasadas en tiempo y direccion */
+.burbuja-avance-ola {
+  fill: var(--burbuja-agua);
+  stroke: none;
+}
+
+.burbuja-avance-ola-a {
+  fill: var(--burbuja-agua-claro);
+  opacity: 0.75;
+  animation: burbuja-avance-ola 5.6s linear infinite;
+}
+
+.burbuja-avance-ola-b {
+  fill: var(--burbuja-agua);
+  opacity: 0.95;
+  animation: burbuja-avance-ola-inversa 3.8s linear infinite;
+}
+
+/* Burbujas que ascienden dentro del agua */
+.burbuja-avance-burbuja {
+  fill: #ffffff;
+  opacity: 0;
+  animation: burbuja-avance-subir 4.2s ease-in infinite;
+}
+
+@keyframes burbuja-avance-ola {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(-100px);
+  }
+}
+
+@keyframes burbuja-avance-ola-inversa {
+  from {
+    transform: translateX(-100px);
+  }
+
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes burbuja-avance-subir {
+  0% {
+    transform: translateY(0);
+    opacity: 0;
+  }
+
+  25% {
+    opacity: 0.55;
+  }
+
+  70% {
+    opacity: 0.35;
+  }
+
+  100% {
+    transform: translateY(calc(-1 * var(--subida, 56px)));
+    opacity: 0;
+  }
+}
+
+/* Anillo de progreso sobre la pista gris */
+.burbuja-avance-anillo-pista {
+  fill: none;
+  stroke: var(--slate-200);
+  stroke-width: 3;
+}
+
+.burbuja-avance-anillo {
+  fill: none;
+  stroke: var(--burbuja-color);
+  stroke-width: 3;
+  stroke-linecap: round;
+  transform: rotate(-90deg);
+  transform-origin: 50% 50%;
+  transition: stroke-dashoffset 900ms cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+/* El numero lleva contorno oscuro para leerse igual sobre el agua que sobre la
+   pista clara. Cuando el agua ya llega al numero, el texto pasa a blanco. */
+.burbuja-avance-valor {
+  fill: var(--burbuja-color);
+  font-family: inherit;
+  font-size: 19px;
+  font-weight: var(--weight-bold, 700);
+  text-anchor: middle;
+  dominant-baseline: central;
+  letter-spacing: -0.5px;
+  paint-order: stroke fill;
+  stroke: rgb(9 24 48 / 0.45);
+  stroke-width: 1.2px;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 1px 1px rgb(9 24 48 / 0.3));
+}
+
+.burbuja-avance[data-agua='si'] .burbuja-avance-valor {
+  fill: #ffffff;
+}
+
+/* ---- bloque de avance dentro de la cabecera de la cuenta ---- */
+.flujo-avance {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-inline-start: auto;
+  padding-inline-start: 1rem;
+  border-inline-start: 1px solid var(--slate-200);
+}
+
+.flujo-avance-texto {
+  min-inline-size: 0;
+}
+
+.flujo-avance-hito {
+  max-inline-size: 24ch;
+  font-size: var(--size-xs);
+  line-height: var(--size-xs-lh);
+  font-weight: var(--weight-semibold);
+  color: var(--slate-700);
+}
+
+.flujo-avance-contador {
+  margin-block-start: 0.125rem;
+  font-size: 11px;
+  color: var(--slate-500);
+}
+
+@media (max-width: 640px) {
+  .flujo-avance {
+    margin-inline-start: 0;
+    padding-inline-start: 0;
+    border-inline-start: 0;
+  }
+}
+
+/* Con menos movimiento pedido por el sistema el liquido sigue, pero muy lento:
+   lo que da la sensacion de avance es el nivel del agua, no las burbujas. */
+@media (prefers-reduced-motion: reduce) {
+  .burbuja-avance-ola-a {
+    animation-duration: 7s;
+  }
+
+  .burbuja-avance-ola-b {
+    animation-duration: 11s;
+  }
+
+  .burbuja-avance-burbuja {
+    animation: none;
+    opacity: 0;
+  }
+}
