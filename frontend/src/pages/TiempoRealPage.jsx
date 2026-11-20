@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'react';
-import { MapaBloques } from '@/components/cdc/MapaBloques';
-import { PanelBloque } from '@/components/cdc/PanelBloque';
-import { TrazabilidadCuenta } from '@/components/cdc/TrazabilidadCuenta';
-import { Card } from '@/components/ui/Card';
-import { ErrorState } from '@/components/ui/ErrorState';
-import { TableSkeleton } from '@/components/ui/Skeletons';
-import { useCdc } from '@/hooks/useCdc';
-import { useContratos } from '@/hooks/useContratos';
+import { MapaBloques } from '@/features/cdc';
+import { PanelBloque } from '@/features/cdc';
+import { TrazabilidadCuenta } from '@/features/cdc';
+import { Card } from '@/shared/components/ui';
+import { ErrorState } from '@/shared/components/ui';
+import { TableSkeleton } from '@/shared/components/ui';
+import { useCdc } from '@/features/cdc';
+import { useContratos } from '@/features/contratos';
 import {
     BLOQUES,
     bloquePorId,
@@ -14,8 +14,8 @@ import {
     conteoDeBloques,
     cuentasDeBloque,
     etiquetaCuenta,
-} from '@/lib/bloques';
-import { coincideTexto } from '@/lib/format';
+} from '@/features/cuentas';
+import { coincideTexto } from '@/shared/utils';
 
 /**
  * Una cuenta se marca como "viva" si su contrato tuvo un evento CDC en los

@@ -5,7 +5,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.LinkedHashSet;
 import java.util.concurrent.ConcurrentHashMap;
@@ -26,6 +28,7 @@ public class SupervisorJdbcRepository implements SecretariasUsuarioResolver {
     private final ConcurrentMap<String, CacheEntry<Set<String>>> secretariasCache = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, CacheEntry<Set<String>>> contratosCache = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, CacheEntry<Long>> idCache = new ConcurrentHashMap<>();
+    private final ConcurrentMap<Long, CacheEntry<Set<String>>> supervisadosCache = new ConcurrentHashMap<>();
 
     public SupervisorJdbcRepository(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
@@ -48,6 +51,36 @@ public class SupervisorJdbcRepository implements SecretariasUsuarioResolver {
                 rs -> rs.next() ? rs.getLong(1) : null, correo);
         if (id != null) idCache.put(clave, new CacheEntry<>(System.currentTimeMillis(), id));
         return id;
+    }
+
+    /**
+     * Usuario de SupervisA que corresponde a la persona conectada. Un mismo correo puede estar
+     * en varias personas de la plataforma, asi que el nombre decide; si no alcanza para
+     * desempatar, no se escoge a ninguna.
+     */
+    public Long idPorCorreoYNombre(String correo, String nombre) {
+        if (correo == null || correo.isBlank()) return null;
+        List<Long> ids = new java.util.ArrayList<>();
+        List<String> nombres = new java.util.ArrayList<>();
+        jdbc.query("SELECT id, nombre FROM public.t_usuarios WHERE lower(btrim(e_mail)) = lower(btrim(?))",
+                (RowCallbackHandler) rs -> {
+                    ids.add(rs.getLong(1));
+                    nombres.add(rs.getString(2));
+                }, correo);
+        if (ids.isEmpty()) return null;
+        if (ids.size() == 1) return ids.get(0);
+        String buscado = AmbitoUsuario.normalizar(nombre);
+        if (buscado == null) return null;
+        Long elegido = null;
+        for (int i = 0; i < ids.size(); i++) {
+            if (Objects.equals(buscado, AmbitoUsuario.normalizar(nombres.get(i)))) {
+                if (elegido != null) {
+                    return null;  // Dos personas con el mismo nombre: no se adivina.
+                }
+                elegido = ids.get(i);
+            }
+        }
+        return elegido;
     }
 
     /**
@@ -111,6 +144,26 @@ public class SupervisorJdbcRepository implements SecretariasUsuarioResolver {
                 """, (RowCallbackHandler) rs -> contratos.add(rs.getString(1)), correo);
         Set<String> resultado = Set.copyOf(contratos);
         contratosCache.put(clave, new CacheEntry<>(System.currentTimeMillis(), resultado));
+        return resultado;
+    }
+
+    /**
+     * Contratos con supervision asignada a ese usuario de SupervisA. Es el alcance del rol
+     * SUPERVISOR: los contratos en los que su supervision es la responsable.
+     */
+    public Set<String> contratosSupervisadosPor(long idSupervisor) {
+        CacheEntry<Set<String>> cache = supervisadosCache.get(idSupervisor);
+        if (cache != null && System.currentTimeMillis() - cache.loadedAt() < AMBITO_CACHE_MS) return cache.value();
+        Set<String> contratos = new LinkedHashSet<>();
+        jdbc.query("""
+                SELECT DISTINCT s.no_contrato
+                FROM contratacion.ct_t_supervision s
+                WHERE s.id_supervisor = ?
+                  AND s.no_contrato IS NOT NULL
+                  AND btrim(s.no_contrato) <> ''
+                """, (RowCallbackHandler) rs -> contratos.add(rs.getString(1)), idSupervisor);
+        Set<String> resultado = Set.copyOf(contratos);
+        supervisadosCache.put(idSupervisor, new CacheEntry<>(System.currentTimeMillis(), resultado));
         return resultado;
     }
 }

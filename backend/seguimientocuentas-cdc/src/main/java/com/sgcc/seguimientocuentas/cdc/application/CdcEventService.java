@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.sgcc.seguimientocuentas.cdc.adapter.in.CDCWebSocketHandler;
 import com.sgcc.seguimientocuentas.common.dto.ContratoResumenDTO;
 import com.sgcc.seguimientocuentas.common.dto.CuentaDetalleDTO;
+import com.sgcc.seguimientocuentas.common.dto.CuentaPasoDTO;
 import com.sgcc.seguimientocuentas.contratos.adapter.out.jpa.InformeActividadRow;
 import com.sgcc.seguimientocuentas.contratos.application.ContratoResumenIndex;
 import com.sgcc.seguimientocuentas.contratos.domain.model.FichaContrato;
@@ -193,7 +194,8 @@ public class CdcEventService {
     private String aplicarTrazabilidad(long id, String noContrato, JsonNode fila) {
         indice.aplicarTrazabilidad(noContrato, id, fila.path("id_estado").asInt(0),
                 numeroLargo(fila.path("id_informe_actividad")), fecha(fila.path("fecha")),
-                texto(fila.path("descripcion")));
+                texto(fila.path("descripcion")), numeroLargo(fila.path("id_ct_t_user_auto")),
+                numeroLargo(fila.path("id_ct_t_user_auto_enviado")));
         return noContrato;
     }
 
@@ -238,8 +240,11 @@ public class CdcEventService {
                 if (anterior != null) {
                     estado.put("paso_anterior", anterior);
                 }
+                String usuario = usuarioUltimoPaso(dto);
+                if (usuario != null) {
+                    estado.put("usuario", usuario);
+                }
             }
-
             ArrayNode cuentas = estado.putArray("cuentas_cobro");
             int sumaAvances = 0;
             int aprobadas = 0;
@@ -249,6 +254,16 @@ public class CdcEventService {
                 nodo.put("id_estado", cuenta.getIdEstadoActual());
                 nodo.put("estado", cuenta.getEstadoActual());
                 nodo.put("avance_individual", avanceEstado(cuenta.getIdEstadoActual()));
+                String usuario = usuarioUltimoPaso(cuenta);
+                if (usuario != null) {
+                    nodo.put("usuario", usuario);
+                }
+                if (cuenta.getResponsableActual() != null) {
+                    nodo.put("responsable", cuenta.getResponsableActual());
+                }
+                if (cuenta.getRolResponsableActual() != null) {
+                    nodo.put("rol_responsable", cuenta.getRolResponsableActual());
+                }
                 if (cuenta.isActiva()) {
                     estado.put("cuenta_cobro_actual", cuenta.getIdInformeActividad());
                 }
@@ -287,6 +302,24 @@ public class CdcEventService {
                 .map(cuenta -> cuenta.getPasos())
                 .filter(pasos -> pasos.size() >= 2)
                 .map(pasos -> pasos.get(pasos.size() - 2).getIdEstado())
+                .orElse(null);
+    }
+
+    /** Quien dejo la cuenta en el estado actual: el ultimo paso lleva el usuario de la trazabilidad. */
+    private static String usuarioUltimoPaso(ContratoResumenDTO dto) {
+        return dto.getCuentasDetalle().stream()
+                .filter(CuentaDetalleDTO::isActiva)
+                .findFirst()
+                .or(() -> dto.getCuentasDetalle().stream().findFirst())
+                .map(CdcEventService::usuarioUltimoPaso)
+                .orElse(null);
+    }
+
+    private static String usuarioUltimoPaso(CuentaDetalleDTO cuenta) {
+        return cuenta.getPasos().stream()
+                .filter(paso -> paso.getUsuario() != null && !paso.getUsuario().isBlank())
+                .reduce((primero, ultimo) -> ultimo)
+                .map(CuentaPasoDTO::getUsuario)
                 .orElse(null);
     }
 

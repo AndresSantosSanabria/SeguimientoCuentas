@@ -23,6 +23,10 @@ public class CuentaDetalleDTO {
     private boolean activa;
     private List<CuentaPasoDTO> pasos = new ArrayList<>();
 
+    /** Quien tiene la cuenta en sus manos ahora, con el rol que tiene en la plataforma. */
+    private String responsableActual;
+    private String rolResponsableActual;
+
     public long getIdInformeActividad() { return idInformeActividad; }
     public void setIdInformeActividad(long idInformeActividad) { this.idInformeActividad = idInformeActividad; }
     public Integer getNoInforme() { return noInforme; }
@@ -53,4 +57,8 @@ public class CuentaDetalleDTO {
     public void setActiva(boolean activa) { this.activa = activa; }
     public List<CuentaPasoDTO> getPasos() { return pasos; }
     public void setPasos(List<CuentaPasoDTO> pasos) { this.pasos = pasos; }
+    public String getResponsableActual() { return responsableActual; }
+    public void setResponsableActual(String responsableActual) { this.responsableActual = responsableActual; }
+    public String getRolResponsableActual() { return rolResponsableActual; }
+    public void setRolResponsableActual(String rolResponsableActual) { this.rolResponsableActual = rolResponsableActual; }
 }

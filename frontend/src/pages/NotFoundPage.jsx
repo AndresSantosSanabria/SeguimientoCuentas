@@ -1,7 +1,7 @@
 import { Compass, Home } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { Card } from '@/components/ui/Card';
-import { EmptyState } from '@/components/ui/EmptyState';
+import { Card } from '@/shared/components/ui';
+import { EmptyState } from '@/shared/components/ui';
 
 export function NotFoundPage() {
   return (

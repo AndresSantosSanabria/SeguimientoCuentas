@@ -1,5 +1,6 @@
 package com.sgcc.seguimientocuentas.common.dto;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -12,6 +13,9 @@ public class ContratoResumenDTO {
     private String supervisor;
     private String fechaInicio;
     private String fechaFin;
+
+    /** Valor total del contrato (presupuesto), no de la cuenta de cobro. */
+    private BigDecimal valorTotal;
 
     private int totalSupervisiones;
     private int totalSupervisionesEsperadas;
@@ -46,6 +50,8 @@ public class ContratoResumenDTO {
     public void setFechaInicio(String fechaInicio) { this.fechaInicio = fechaInicio; }
     public String getFechaFin() { return fechaFin; }
     public void setFechaFin(String fechaFin) { this.fechaFin = fechaFin; }
+    public BigDecimal getValorTotal() { return valorTotal; }
+    public void setValorTotal(BigDecimal valorTotal) { this.valorTotal = valorTotal; }
     public int getTotalSupervisiones() { return totalSupervisiones; }
     public void setTotalSupervisiones(int totalSupervisiones) { this.totalSupervisiones = totalSupervisiones; }
     public int getTotalSupervisionesEsperadas() { return totalSupervisionesEsperadas; }

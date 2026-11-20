@@ -135,6 +135,28 @@ public class ContratoResumenIndex {
         return ficha == null ? null : ficha.valorTotal();
     }
 
+    /**
+     * Comparativa entre secretarias: se agrega el indice completo, sin el recorte del alcance de
+     * quien pregunta, y solo se devuelven totales por secretaria.
+     */
+    public ComparativaSecretarias comparativaSecretarias(List<Integer> anios, LocalDate desde,
+                                                          LocalDate hasta, String alcance) {
+        List<ContratoResumenDTO> todos = new ArrayList<>(fichas.size());
+        for (FichaContrato ficha : fichas.values()) {
+            todos.add(ficha.dto());
+        }
+        return ComparativaSecretarias.construir(todos, anios, desde, hasta, alcance, LocalDate.now());
+    }
+
+    /** Todas las secretarias que aparecen en el indice, para poder compararlas entre si. */
+    public java.util.Set<String> secretariasCatalogo() {
+        java.util.Set<String> nombres = new java.util.TreeSet<>();
+        for (FichaContrato ficha : fichas.values()) {
+            nombres.add(ComparativaSecretarias.etiquetaSecretaria(ficha.dto()));
+        }
+        return nombres;
+    }
+
     public List<ContratoResumenDTO> contratosDelSupervisor(long idSupervisor) {
         return fichas.values().stream()
                 .filter(ficha -> ficha.idSupervisorActual() != null && ficha.idSupervisorActual() == idSupervisor)
@@ -232,13 +254,14 @@ public class ContratoResumenIndex {
     }
 
     public void aplicarTrazabilidad(String noContrato, long idTraza, int idEstado, Long idInforme,
-                                    LocalDateTime fecha, String descripcion) {
+                                    LocalDateTime fecha, String descripcion, Long idUsuario,
+                                    Long idUsuarioEnviado) {
         FichaContrato ficha = asegurarFicha(noContrato);
         if (ficha == null) {
             return;
         }
         synchronized (ficha) {
-            ficha.ponerTraza(idTraza, noContrato, idEstado, idInforme, fecha, descripcion);
+            ficha.ponerTraza(idTraza, noContrato, idEstado, idInforme, fecha, descripcion, idUsuario, idUsuarioEnviado);
         }
         contratosPorTraza.put(idTraza, noContrato);
         recalcular(ficha);

@@ -448,6 +448,20 @@
   color: var(--slate-800);
 }
 
+.cuenta-tarjeta-responsa {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--slate-700);
+}
+
+.cuenta-tarjeta-responsa svg {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  color: var(--brand-500);
+}
+
 .cuenta-tarjeta-motivo {
   display: -webkit-box;
   overflow: hidden;
@@ -549,6 +563,26 @@
   font-size: 11px;
   line-height: 1.25rem;
   color: var(--slate-500);
+}
+
+.trazabilidad-responsa {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.375rem;
+}
+
+.trazabilidad-responsa > svg {
+  flex: 0 0 auto;
+  width: 0.875rem;
+  height: 0.875rem;
+  margin-block-start: 0.125rem;
+  color: var(--brand-500);
+}
+
+.trazabilidad-responsa strong {
+  display: block;
+  font-weight: var(--weight-semibold);
+  color: var(--slate-800);
 }
 
 .trazabilidad-devolucion {
@@ -668,12 +702,6 @@
 }
 
 /* ---- eventos CDC de la cuenta ---- */
-.trazabilidad-sin-eventos {
-  font-size: 11px;
-  line-height: 1.375rem;
-  color: var(--slate-500);
-}
-
 .trazabilidad-eventos {
   display: flex;
   flex-direction: column;
@@ -712,22 +740,4 @@
   flex-shrink: 0;
   font-size: 10px;
   color: var(--slate-400);
-}
-
-.trazabilidad-pie {
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
-  border-block-start: 1px solid var(--slate-100);
-  padding-block-start: 0.75rem;
-  font-size: 11px;
-  line-height: 1.375rem;
-  color: var(--slate-500);
-}
-
-.trazabilidad-pie > svg {
-  width: 0.875rem;
-  height: 0.875rem;
-  flex-shrink: 0;
-  color: var(--brand-500);
 }

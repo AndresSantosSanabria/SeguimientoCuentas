@@ -29,6 +29,10 @@ public class CtTRazabilidad {
     @Column(name = "id_ct_t_user_auto")
     private Long idUsuario;
 
+    /** A quién se le envió la cuenta en este movimiento: es quien la tiene en sus manos. */
+    @Column(name = "id_ct_t_user_auto_enviado")
+    private Long idUsuarioEnviado;
+
     @Column(name = "tipo_registro")
     private int tipoRegistro;
 
@@ -52,6 +56,8 @@ public class CtTRazabilidad {
     public void setIdInformeActividad(Long idInformeActividad) { this.idInformeActividad = idInformeActividad; }
     public Long getIdUsuario() { return idUsuario; }
     public void setIdUsuario(Long idUsuario) { this.idUsuario = idUsuario; }
+    public Long getIdUsuarioEnviado() { return idUsuarioEnviado; }
+    public void setIdUsuarioEnviado(Long idUsuarioEnviado) { this.idUsuarioEnviado = idUsuarioEnviado; }
     public int getTipoRegistro() { return tipoRegistro; }
     public void setTipoRegistro(int tipoRegistro) { this.tipoRegistro = tipoRegistro; }
     public Long getNoRas() { return noRas; }

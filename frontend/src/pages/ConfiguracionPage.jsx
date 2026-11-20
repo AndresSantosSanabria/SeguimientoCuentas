@@ -1,11 +1,11 @@
 import { KeyRound, ShieldCheck, UserCog, Users } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { Badge } from '@/components/ui/Badge';
-import { Card, CardHeader } from '@/components/ui/Card';
-import { EmptyState } from '@/components/ui/EmptyState';
-import { ErrorState } from '@/components/ui/ErrorState';
-import { PageHeader } from '@/components/ui/PageHeader';
-import { TableSkeleton } from '@/components/ui/Skeletons';
+import { Badge } from '@/shared/components/ui';
+import { Card, CardHeader } from '@/shared/components/ui';
+import { EmptyState } from '@/shared/components/ui';
+import { ErrorState } from '@/shared/components/ui';
+import { PageHeader } from '@/shared/components/ui';
+import { TableSkeleton } from '@/shared/components/ui';
 import {
     useCambiarRol,
     useDefinirModulo,
@@ -13,8 +13,8 @@ import {
     usePermisosAcceso,
     useRolesAcceso,
     useUsuariosAcceso,
-} from '@/hooks/useAccesos';
-import { formatDateTime } from '@/lib/format';
+} from '@/features/accesos';
+import { formatDateTime } from '@/shared/utils';
 
 const TABS = [
     { id: 'usuarios', label: 'Usuarios', icon: Users },

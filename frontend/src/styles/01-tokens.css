@@ -7,16 +7,16 @@
 
 :root {
   /* ---- marca GE-COR ---- */
-  --brand-50: #eef7ff;
-  --brand-100: #d9edff;
-  --brand-200: #b6dcff;
-  --brand-300: #7cc2ff;
-  --brand-400: #3aa4fb;
-  --brand-500: #1f8ae8;
-  --brand-600: #146fc4;
-  --brand-700: #11599e;
-  --brand-800: #123f74;
-  --brand-900: #0d2b52;
+  --brand-50: #f2f7fa;
+  --brand-100: #e3eef5;
+  --brand-200: #c9dded;
+  --brand-300: #8fb8d4;
+  --brand-400: #3e88b4;
+  --brand-500: #17699b;
+  --brand-600: #0f4d72;
+  --brand-700: #0f4d72;
+  --brand-800: #1c2b33;
+  --brand-900: #1c2b33;
 
   /* ---- neutros ---- */
   --slate-50: #f8fafc;
@@ -110,11 +110,11 @@
   --sky-100-a60: rgba(223, 242, 254, 0.6);
   --sky-100-a70: rgba(223, 242, 254, 0.7);
 
-  --brand-50-a70: rgba(238, 247, 255, 0.7);
-  --brand-500-a10: rgba(31, 138, 232, 0.1);
-  --brand-500-a25: rgba(31, 138, 232, 0.25);
-  --brand-900-a20: rgba(13, 43, 82, 0.2);
-  --brand-900-a25: rgba(13, 43, 82, 0.25);
+  --brand-50-a70: rgba(242, 247, 250, 0.7);
+  --brand-500-a10: rgba(23, 105, 155, 0.1);
+  --brand-500-a25: rgba(23, 105, 155, 0.25);
+  --brand-900-a20: rgba(28, 43, 51, 0.2);
+  --brand-900-a25: rgba(28, 43, 51, 0.25);
 
   /* ---- tipografía ---- */
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
@@ -170,8 +170,8 @@
   --inset-blanco-18: inset 0 1px 0 rgba(255, 255, 255, 0.18);
 
   /* ---- gradientes de marca ---- */
-  --brand-gradient: linear-gradient(115deg, #38c6e8 0%, #1e7fd8 48%, #123a86 100%);
-  --brand-gradient-soft: linear-gradient(135deg, #f2f9ff 0%, #e3f2fe 50%, #eef6ff 100%);
+  --brand-gradient: linear-gradient(135deg, #17699b 0%, #0f4d72 100%);
+  --brand-gradient-soft: linear-gradient(135deg, #f2f7fa 0%, #e3eef5 50%, #f2f7fa 100%);
   --topbar-brillo: linear-gradient(
     180deg,
     rgba(255, 255, 255, 0.14) 0%,

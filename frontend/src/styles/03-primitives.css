@@ -15,15 +15,7 @@
 }
 
 .card::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  right: 1rem;
-  left: 1rem;
-  height: 2px;
-  border-radius: var(--radius-full);
-  background-image: var(--brand-gradient);
-  opacity: 0.7;
+  display: none;
 }
 
 .card-header {
@@ -198,13 +190,14 @@
 }
 
 .btn-primary {
-  background-image: var(--brand-gradient);
+  background-image: linear-gradient(135deg, #17699b 0%, #0f4d72 100%);
+  background-color: #17699b;
   color: #ffffff;
-  box-shadow: var(--shadow-sm-tinted);
+  box-shadow: none;
 }
 
 .btn-primary:hover {
-  filter: brightness(1.1);
+  filter: brightness(1.08);
 }
 
 .btn-primary:focus-visible {
@@ -274,7 +267,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  background-image: var(--brand-gradient);
+  background-image: linear-gradient(135deg, #17699b 0%, #0f4d72 100%);
+  background-color: #17699b;
   padding: 0.875rem 1.25rem;
   color: #ffffff;
 }

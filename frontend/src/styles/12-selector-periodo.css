@@ -1,0 +1,118 @@
+/* ---- selector de período (calendario de rango) ---- */
+.selector-periodo {
+  position: relative;
+}
+
+.periodo-panel {
+  position: absolute;
+  top: calc(100% + 0.375rem);
+  left: 0;
+  z-index: 40;
+  display: grid;
+  gap: 0.5rem;
+  width: 19rem;
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-lg);
+  background-color: #ffffff;
+  padding: 0.625rem;
+  box-shadow: var(--shadow-card);
+}
+
+.periodo-cabecera {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.periodo-flecha {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius);
+  background-color: #ffffff;
+  color: var(--slate-600);
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.periodo-flecha:hover {
+  background-color: var(--brand-50);
+  color: var(--brand-700);
+}
+
+.periodo-mes {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.periodo-anio {
+  width: 5rem;
+}
+
+.periodo-rejilla {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.periodo-dia-semana {
+  padding-block: 0.125rem;
+  text-align: center;
+  font-size: 10px;
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--slate-400);
+}
+
+.periodo-dia {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 1.875rem;
+  border: 0;
+  border-radius: var(--radius);
+  background-color: transparent;
+  font-size: var(--size-xs);
+  color: var(--slate-700);
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.periodo-dia:hover {
+  background-color: var(--brand-50);
+  color: var(--brand-700);
+}
+
+.periodo-dia[data-fuera='true'] {
+  color: var(--slate-300);
+}
+
+.periodo-dia[data-rango='true'] {
+  background-color: var(--brand-50);
+  color: var(--brand-800);
+}
+
+.periodo-dia[data-inicio='true'],
+.periodo-dia[data-fin='true'] {
+  background-color: var(--brand-500);
+  color: #ffffff;
+  font-weight: var(--weight-semibold);
+}
+
+.periodo-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  border-top: 1px solid var(--slate-200);
+  padding-top: 0.5rem;
+}
+
+@media (max-width: 640px) {
+  .periodo-panel {
+    width: min(19rem, calc(100vw - 2rem));
+  }
+}

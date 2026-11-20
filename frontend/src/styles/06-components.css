@@ -89,6 +89,54 @@
   padding-block-start: 0.75rem;
 }
 
+/* ---- KPI como enlace al listado filtrado ---- */
+.kpi-card-enlace {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  border-radius: inherit;
+}
+
+.kpi-card-enlace:hover .kpi-card,
+.kpi-card-enlace:focus-visible .kpi-card {
+  border-color: var(--brand-300);
+  box-shadow: 0 0.5rem 1.25rem rgba(15, 23, 43, 0.1);
+}
+
+.kpi-card-enlace:focus-visible {
+  outline: 2px solid var(--brand-500);
+  outline-offset: 2px;
+}
+
+.kpi-enlace-pista {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.125rem;
+  margin-top: 0.5rem;
+  font-size: var(--size-xs);
+  line-height: var(--size-xs-lh);
+  font-weight: var(--weight-medium);
+  color: var(--brand-600);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.kpi-enlace-pista svg {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+.kpi-card-enlace:hover .kpi-enlace-pista,
+.kpi-card-enlace:focus-visible .kpi-enlace-pista {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .kpi-enlace-pista {
+    opacity: 1;
+  }
+}
+
 /* ---- barra de avance ---- */
 .progreso {
   display: flex;
@@ -1251,6 +1299,30 @@
 
 .flujo-tip[data-tono='devuelta'] {
   border-color: var(--rose-200);
+}
+
+/* Responsables del nodo naranja: quién lo hizo y quién lo tiene en las manos. */
+.flujo-tip-responsables {
+  display: grid;
+  gap: 0.125rem;
+  margin-block-start: 0.25rem;
+  border-block-start: 1px solid var(--amber-100);
+  padding-block-start: 0.25rem;
+}
+
+.flujo-tip-responsable {
+  display: flex;
+  align-items: baseline;
+  gap: 0.25rem;
+  color: var(--slate-700);
+}
+
+.flujo-tip-responsable > svg {
+  width: 0.75rem;
+  height: 0.75rem;
+  flex-shrink: 0;
+  align-self: center;
+  color: var(--amber-600);
 }
 
 .flujo-reproductor {

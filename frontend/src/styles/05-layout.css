@@ -5,7 +5,10 @@
    ============================================ */
 
 .app-shell {
+  display: flex;
   min-height: 100vh;
+  gap: 24px;
+  padding: 16px;
   background-color: var(--app-bg);
 }
 
@@ -141,16 +144,14 @@
   /* Red de seguridad: nunca deja que el contenido empuje una barra de
      desplazamiento horizontal al resto de la pagina. */
   overflow: hidden;
-  border-block-end: 1px solid var(--white-a10);
-  background-image: var(--brand-gradient);
-  box-shadow: var(--shadow-topbar);
+  border-block-end: 0;
+  background-color: transparent;
+  background-image: none;
+  box-shadow: none;
 }
 
 .topbar-brillo {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background-image: var(--topbar-brillo);
+  display: none;
 }
 
 .topbar-inner {
@@ -333,65 +334,6 @@
   white-space: nowrap;
 }
 
-/* ---- navegación ---- */
-.topbar-nav {
-  display: flex;
-  order: 9999;
-  width: 100%;
-  align-items: center;
-  gap: 0.25rem;
-  margin-inline: -1rem;
-  overflow-x: auto;
-  border-block-start: 1px solid var(--white-a10);
-  padding: 0.375rem 1rem 0.125rem;
-  scrollbar-width: none;
-}
-
-.topbar-nav::-webkit-scrollbar {
-  display: none;
-}
-
-.topbar-link {
-  display: inline-flex;
-  flex-shrink: 0;
-  align-items: center;
-  gap: 0.5rem;
-  border-radius: var(--radius-full);
-  padding: 0.5rem 0.75rem;
-  font-size: var(--size-sm);
-  line-height: var(--size-sm-lh);
-  font-weight: var(--weight-medium);
-  white-space: nowrap;
-  color: #ffffff;
-  transition-property: color, background-color, box-shadow;
-  transition-duration: var(--durable);
-  transition-timing-function: var(--easing);
-}
-
-.topbar-link > svg {
-  width: 1rem;
-  height: 1rem;
-  color: var(--white-a80);
-}
-
-.topbar-link:hover {
-  background-color: var(--white-a10);
-}
-
-.topbar-link:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px var(--white-a70);
-}
-
-.topbar-link[aria-current='page'] {
-  background-color: var(--white-a20);
-  box-shadow: 0 0 0 1px var(--white-a40), var(--shadow-link-activo);
-}
-
-.topbar-link[aria-current='page'] > svg {
-  color: #ffffff;
-}
-
 /* ---- 640 ---- */
 @media (min-width: 640px) {
   .app-main {
@@ -403,11 +345,6 @@
   }
 
   .topbar-inner {
-    padding-inline: 1.5rem;
-  }
-
-  .topbar-nav {
-    margin-inline: -1.5rem;
     padding-inline: 1.5rem;
   }
 }
@@ -444,19 +381,6 @@
 
   .topbar-acciones {
     order: 3;
-  }
-
-  .topbar-nav {
-    order: 2;
-    width: auto;
-    min-width: 0;
-    margin-inline: 0;
-    /* Valvula de seguridad: si aun asi la fila aprieta, los enlaces se
-       desplazan en vez de recortarse y jamas empujan al topbar fuera de la
-       pantalla. */
-    overflow-x: auto;
-    border-block-start-width: 0;
-    padding: 0;
   }
 }
 

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogoApp } from '@/components/ui/LogoApp';
-import { appConfig } from '@/config/env';
-import { auth, clearOidcStaleState } from '@/utils/auth';
+import { LogoApp } from '@/shared/components/ui';
+import { appConfig } from '@/app/config/env';
+import { auth, clearOidcStaleState } from '@/features/sesion';
 
 const CALLBACK_TIMEOUT_MS = 12000;
 

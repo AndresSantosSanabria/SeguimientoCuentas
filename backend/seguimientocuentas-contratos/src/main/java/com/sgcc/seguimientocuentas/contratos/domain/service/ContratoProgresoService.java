@@ -9,11 +9,13 @@ import com.sgcc.seguimientocuentas.contratos.adapter.out.jpa.InformeActividadRow
 import com.sgcc.seguimientocuentas.contratos.adapter.out.jpa.SupervisionJdbcRepository;
 import com.sgcc.seguimientocuentas.contratos.adapter.out.jpa.SupervisionJdbcRepository.UltimaSupervision;
 import com.sgcc.seguimientocuentas.contratos.adapter.out.jpa.SupervisorJdbcRepository;
+import com.sgcc.seguimientocuentas.contratos.adapter.out.jpa.UsuarioAutoJdbcRepository;
 import com.sgcc.seguimientocuentas.contratos.domain.model.Catalogos;
 import com.sgcc.seguimientocuentas.contratos.domain.model.CtPEstado;
 import com.sgcc.seguimientocuentas.contratos.domain.model.CtTContratoSap;
 import com.sgcc.seguimientocuentas.contratos.domain.model.CtTRazabilidad;
 import com.sgcc.seguimientocuentas.contratos.domain.model.FichaContrato;
+import com.sgcc.seguimientocuentas.contratos.domain.model.UsuarioAuto;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -66,33 +68,40 @@ public class ContratoProgresoService {
     private final CtPEstadoRepository estadoRepository;
     private final InformeActividadJdbcRepository informeActividadRepository;
     private final SupervisorJdbcRepository supervisorRepository;
+    private final UsuarioAutoJdbcRepository usuarioAutoRepository;
 
     private final Map<Integer, String> estadosMap = new ConcurrentHashMap<>();
     private final Map<Long, String> nombresSupervisor = new ConcurrentHashMap<>();
+    private final Map<Long, UsuarioAuto> usuariosAuto = new ConcurrentHashMap<>();
 
     public ContratoProgresoService(CtTContratoSapRepository contratoSapRepository,
                                     SupervisionJdbcRepository supervisionJdbcRepository,
                                     CtTRazabilidadRepository trazabilidadRepository,
                                     CtPEstadoRepository estadoRepository,
                                     InformeActividadJdbcRepository informeActividadRepository,
-                                    SupervisorJdbcRepository supervisorRepository) {
+                                    SupervisorJdbcRepository supervisorRepository,
+                                    UsuarioAutoJdbcRepository usuarioAutoRepository) {
         this.contratoSapRepository = contratoSapRepository;
         this.supervisionJdbcRepository = supervisionJdbcRepository;
         this.trazabilidadRepository = trazabilidadRepository;
         this.estadoRepository = estadoRepository;
         this.informeActividadRepository = informeActividadRepository;
         this.supervisorRepository = supervisorRepository;
+        this.usuarioAutoRepository = usuarioAutoRepository;
     }
 
     @PostConstruct
     public void init() {
         recargarEstados();
         recargarSupervisores();
-        log.info("Catalogos listos: {} estados y {} supervisores", estadosMap.size(), nombresSupervisor.size());
+        recargarUsuariosAuto();
+        log.info("Catalogos listos: {} estados, {} supervisores y {} personas de trazabilidad",
+                estadosMap.size(), nombresSupervisor.size(), usuariosAuto.size());
     }
 
     public Catalogos catalogos() {
-        return new Catalogos(Map.copyOf(estadosMap), SIGUIENTES_PASOS, Map.copyOf(nombresSupervisor));
+        return new Catalogos(Map.copyOf(estadosMap), SIGUIENTES_PASOS,
+                Map.copyOf(nombresSupervisor), Map.copyOf(usuariosAuto));
     }
 
     /** Texto de los estados: cambia rara vez, y el CDC de ct_p_estado avisa cuando cambia. */
@@ -119,6 +128,19 @@ public class ContratoProgresoService {
             nombresSupervisor.putAll(supervisorRepository.nombresPorId());
         } catch (Exception e) {
             log.warn("No se pudo leer t_usuarios: {}", e.getMessage());
+        }
+    }
+
+    /** Las personas de la trazabilidad con su rol: quién se movió y con qué papel. */
+    public void recargarUsuariosAuto() {
+        try {
+            Map<Long, UsuarioAuto> leidos = usuarioAutoRepository.porIdAuto();
+            if (!leidos.isEmpty()) {
+                usuariosAuto.clear();
+                usuariosAuto.putAll(leidos);
+            }
+        } catch (Exception e) {
+            log.warn("No se pudo leer ct_t_user_auto: {}", e.getMessage());
         }
     }
 

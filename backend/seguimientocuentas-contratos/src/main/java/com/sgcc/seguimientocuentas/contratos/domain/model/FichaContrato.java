@@ -25,7 +25,6 @@ import java.util.Objects;
 public class FichaContrato {
 
     private static final int ESTADO_APROBADO = 19;
-    private static final int SUPERVISIONES_ESPERADAS = 12;
 
     private final ContratoResumenDTO dto = new ContratoResumenDTO();
     private final Map<Long, InformeActividadRow> informes = new LinkedHashMap<>();
@@ -45,7 +44,6 @@ public class FichaContrato {
         dto.setDependencia(dependencia);
         dto.setFechaInicio(fechaInicio);
         dto.setFechaFin(fechaFin);
-        dto.setTotalSupervisionesEsperadas(SUPERVISIONES_ESPERADAS);
     }
 
     public String noContrato() {
@@ -76,6 +74,7 @@ public class FichaContrato {
         dto.setFechaInicio(fechaInicio);
         dto.setFechaFin(fechaFin);
         this.valorTotal = valorTotal;
+        dto.setValorTotal(valorTotal);
     }
 
     public void setSupervision(int totalSupervisiones, Short avanceDeclarado, Long idSupervisor) {
@@ -126,7 +125,7 @@ public class FichaContrato {
 
     /** Inserta o reemplaza la traza manteniendo el orden ascendente por id, que es el del recorrido. */
     public void ponerTraza(long id, String noContrato, int idEstado, Long idInforme,
-                           LocalDateTime fecha, String descripcion) {
+                           LocalDateTime fecha, String descripcion, Long idUsuario, Long idUsuarioEnviado) {
         CtTRazabilidad traza = new CtTRazabilidad();
         traza.setId(id);
         traza.setNoContrato(noContrato);
@@ -134,6 +133,8 @@ public class FichaContrato {
         traza.setIdInformeActividad(idInforme);
         traza.setFecha(fecha);
         traza.setDescripcion(descripcion);
+        traza.setIdUsuario(idUsuario);
+        traza.setIdUsuarioEnviado(idUsuarioEnviado);
         ponerTraza(traza);
     }
 
@@ -188,6 +189,10 @@ public class FichaContrato {
         dto.setCuentasExigibles(exigibles);
         dto.setCuentasEnMora(Math.max(0, exigibles - registradas));
         dto.setInformeCargado(registradas > 0);
+
+        // Las supervisiones esperadas son las del ciclo del contrato: una por cada mes de
+        // vigencia, que es el mismo conteo que las cuentas de cobro esperadas.
+        dto.setTotalSupervisionesEsperadas(esperadas);
 
         dto.setTotalSupervisiones(totalSupervisiones);
         short declarado = avanceDeclarado != null ? avanceDeclarado : 0;
@@ -272,6 +277,10 @@ public class FichaContrato {
             paso.setEstado(catalogos.nombreEstado(traza.getIdEstado()));
             paso.setFecha(traza.getFecha() != null ? traza.getFecha().toString() : null);
             paso.setDescripcion(traza.getDescripcion());
+            paso.setUsuario(catalogos.nombreUsuario(traza.getIdUsuario()));
+            paso.setRolUsuario(catalogos.rolUsuario(traza.getIdUsuario()));
+            paso.setDestinatario(catalogos.nombreUsuario(traza.getIdUsuarioEnviado()));
+            paso.setRolDestinatario(catalogos.rolUsuario(traza.getIdUsuarioEnviado()));
 
             int ultimo = pasos.isEmpty() ? -1 : pasos.get(pasos.size() - 1).getIdEstado();
             if (ultimo == traza.getIdEstado()) {
@@ -289,6 +298,13 @@ public class FichaContrato {
             cuenta.setFechaEstado(ultima.getFecha() != null ? ultima.getFecha().toString() : null);
             cuenta.setDescripcionEstado(ultima.getDescripcion());
             cuenta.setSiguientePaso(catalogos.siguientePaso(ultima.getIdEstado()));
+            // Quien tiene la cuenta en sus manos es a quien se le envió el último movimiento; si el
+            // movimiento no trae destinatario, es la misma persona que lo hizo.
+            Long enManos = ultima.getIdUsuarioEnviado() != null
+                    ? ultima.getIdUsuarioEnviado()
+                    : ultima.getIdUsuario();
+            cuenta.setResponsableActual(catalogos.nombreUsuario(enManos));
+            cuenta.setRolResponsableActual(catalogos.rolUsuario(enManos));
         } else {
             cuenta.setIdEstadoActual(1);
             cuenta.setEstadoActual(catalogos.nombreEstado(1));
