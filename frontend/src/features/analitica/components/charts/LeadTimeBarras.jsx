@@ -1,5 +1,6 @@
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { AXIS_TICK } from '@/features/analitica/components/charts/ChartTooltip';
+import { estiloTooltipDentroDeGrafica } from '@/features/analitica/components/charts/estiloTooltipDentroDeGrafica';
 import { ETAPAS, formatDuracion } from '@/features/analitica/utils/leadTime';
 import { formatNumber, formatPercentReal, truncate } from '@/shared/utils';
 
@@ -68,7 +69,11 @@ export function LeadTimeBarras({ data, height = 320 }) {
             width={168}
             tickFormatter={(value) => truncate(value, 26)}
           />
-          <Tooltip cursor={{ fill: '#eef3f7' }} content={<LeadTimeTooltip />} />
+          <Tooltip
+            cursor={{ fill: '#eef3f7' }}
+            content={<LeadTimeTooltip />}
+            wrapperStyle={estiloTooltipDentroDeGrafica({ anchoEje: 168, margenIzquierda: 4, margenDerecha: 34 })}
+          />
           {ETAPAS.map((etapa, index) => (
             <Bar
               key={etapa.id}

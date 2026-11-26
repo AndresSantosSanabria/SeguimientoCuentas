@@ -41,7 +41,7 @@ export const ALCANCES_LEADTIME = [
 ];
 
 /** Fecha de un paso: el backend manda `LocalDateTime` («2025-01-15T10:30:00») o fecha simple. */
-function parseFechaPaso(value) {
+export function parseFechaPaso(value) {
     if (!value)
         return null;
     const texto = String(value).trim();
@@ -52,7 +52,7 @@ function parseFechaPaso(value) {
 }
 
 /** Bloque que tiene la cuenta durante ese tramo: el del estado, o el que la retoma si es devolución. */
-function bloqueDeTramo(idEstado, origen) {
+export function bloqueDeTramo(idEstado, origen) {
     if (idEstado === ESTADO_APROBADO)
         return 'tesoreria';
     if (ESTADOS_DEVOLUCION.has(idEstado))

@@ -139,6 +139,18 @@ export function conteoDeBloques(contratos) {
   return { conteo, totales };
 }
 
+/**
+ * Cuándo llegó la cuenta a este bloque: la fecha del primer paso cuyo estado cae en el bloque.
+ * No se usa `fechaEstado` (el último cambio), porque un salto de estado dentro del mismo bloque
+ * reiniciaría la antigüedad y rompería el orden de llegada.
+ */
+function fechaLlegadaAlBloque(cuenta, bloqueId) {
+  for (const paso of pasosDe(cuenta)) {
+    if (BLOQUE_POR_ESTADO[paso.idEstado] === bloqueId && paso.fecha) return paso.fecha;
+  }
+  return cuenta?.fechaEstado ?? null;
+}
+
 /** Las cuentas de un solo bloque, con su contrato a mano para pintar la tarjeta. */
 export function cuentasDeBloque(contratos, bloqueId) {
   const listas = { curso: [], devolucion: [] };
@@ -150,11 +162,12 @@ export function cuentasDeBloque(contratos, bloqueId) {
       destino.push({ contrato, cuenta, clase });
     }
   }
-  // Quien lleva más tiempo en el bloque va primero: es el que más tarda en moverse.
-  const porAntiguedad = (a, b) =>
-    String(a.cuenta.fechaEstado ?? '9999').localeCompare(String(b.cuenta.fechaEstado ?? '9999'));
-  listas.curso.sort(porAntiguedad);
-  listas.devolucion.sort(porAntiguedad);
+  // Primero en llegar, primero en verse: se ordena por la fecha de entrada al bloque.
+  const porLlegada = (a, b) =>
+    String(fechaLlegadaAlBloque(a.cuenta, bloqueId) ?? '9999')
+      .localeCompare(String(fechaLlegadaAlBloque(b.cuenta, bloqueId) ?? '9999'));
+  listas.curso.sort(porLlegada);
+  listas.devolucion.sort(porLlegada);
   return listas;
 }
 

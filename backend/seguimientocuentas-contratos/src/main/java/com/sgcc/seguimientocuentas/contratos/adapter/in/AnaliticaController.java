@@ -42,13 +42,14 @@ public class AnaliticaController {
             @RequestParam(required = false) String anios,
             @RequestParam(required = false) String desde,
             @RequestParam(required = false) String hasta,
-            @RequestParam(required = false, defaultValue = "curso") String alcance) {
+            @RequestParam(required = false, defaultValue = "curso") String alcance,
+            @RequestParam(required = false, defaultValue = "todas") String ops) {
         AmbitoUsuario ambito = sesionService.alcanceActual();
         if (!ambito.puede("CONTRATOS_VER") || !ambito.puede(PERMISO_COMPARAR)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
         ComparativaSecretarias comparativa = indice.comparativaSecretarias(
-                anios(anios), fecha(desde), fecha(hasta), alcance);
+                anios(anios), fecha(desde), fecha(hasta), alcance, ops);
         // Las secretarias sin contratos en este filtro tambien se ofrecen, con sus cifras en cero.
         // El orden es por carga de cobro pendiente, el mismo criterio de la grafica
         // «Cuentas por secretaria» de la pagina.

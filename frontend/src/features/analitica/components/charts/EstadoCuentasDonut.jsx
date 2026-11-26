@@ -1,6 +1,7 @@
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
 import { formatNumber, formatPercentReal } from '@/shared/utils';
 import { ChartTooltip } from '@/features/analitica/components/charts/ChartTooltip';
+import { estiloTooltipDentroDeGrafica } from '@/features/analitica/components/charts/estiloTooltipDentroDeGrafica';
 
 export function EstadoCuentasDonut({ enProceso, devolucionRechazo, pctEnProceso }) {
   const total = enProceso + devolucionRechazo;
@@ -27,7 +28,10 @@ export function EstadoCuentasDonut({ enProceso, devolucionRechazo, pctEnProceso 
                 <Cell key={entry.label} fill={entry.color} />
               ))}
             </Pie>
-            <Tooltip content={<ChartTooltip total={total} />} />
+            <Tooltip
+              content={<ChartTooltip total={total} />}
+              wrapperStyle={estiloTooltipDentroDeGrafica()}
+            />
           </PieChart>
         </ResponsiveContainer>
         <div className="donut-centro">

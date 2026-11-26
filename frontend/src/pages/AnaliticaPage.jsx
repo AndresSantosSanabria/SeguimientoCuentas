@@ -30,7 +30,7 @@ import { useDebouncedValue } from '@/shared/hooks';
 import { aniosDisponibles, buildCuentasSecretaria, contratoEnAnios, contratoEnRango, corteEfectivo, periodoFiltroLabel, secretariasDisponibles, } from '@/features/cuentas';
 import { buildCuentasDetalle, descargarCuentasExcel } from '@/features/cuentas';
 import { buildLeadTime, formatDuracion } from '@/features/analitica';
-import { ALCANCES_CUENTAS, contratoEnAlcance, contratosEnAlcance } from '@/features/cuentas';
+import { ALCANCES_CUENTAS, contratoEnAlcance, contratosEnAlcance, contratoEnOps, OPCIONES_OPS } from '@/features/cuentas';
 import { descargarLeadTimeExcel } from '@/features/analitica';
 import { descargarSupervisoresExcel } from '@/features/contratos';
 import { buildContratosPorSupervisor } from '@/features/contratos';
@@ -65,6 +65,7 @@ export function AnaliticaPage() {
     const [exportandoSupervisor, setExportandoSupervisor] = useState(false);
     const [exportandoLead, setExportandoLead] = useState(false);
     const [alcanceCuentas, setAlcanceCuentas] = useState('curso');
+    const [ops, setOps] = useState('todas');
     const [secretarias] = useState([]);
     const [situacion] = useState('todas');
     const [alcance] = useState('corte');
@@ -93,7 +94,8 @@ export function AnaliticaPage() {
     const opcionesSecretaria = useMemo(() => (data ? secretariasDisponibles(data) : []), [data]);
     const opcionesAlcanceCuentas = useMemo(() => ALCANCES_CUENTAS.map((opcion) => ({ value: opcion.valor, label: opcion.label })), []);
     const contratosFiltrados = useMemo(() => (data ?? []).filter((contrato) => contratoEnAnios(contrato, aniosSeleccionados)
-        && contratoEnRango(contrato, periodo.desde, periodo.hasta)), [data, aniosSeleccionados, periodo]);
+        && contratoEnRango(contrato, periodo.desde, periodo.hasta)
+        && contratoEnOps(contrato, ops)), [data, aniosSeleccionados, periodo, ops]);
     // El alcance de cuentas recorta el universo que se mide en toda la página.
     const contratosVisibles = useMemo(() => contratosEnAlcance(contratosFiltrados, alcanceCuentas), [contratosFiltrados, alcanceCuentas]);
     const analytics = useContractAnalytics(data ? contratosVisibles : null);
@@ -178,6 +180,7 @@ export function AnaliticaPage() {
         desde: periodo.desde,
         hasta: periodo.hasta,
         alcance: alcanceCuentas,
+        ops,
     });
     // La calificación y el riesgo son del contratista, así que se miden sobre los contratos
     // del año seleccionado, no sobre el estado de la cuenta de cobro.
@@ -240,6 +243,9 @@ export function AnaliticaPage() {
         <SelectorPeriodo desde={periodo.desde} hasta={periodo.hasta} onChange={aplicarPeriodo} anios={opcionesAnio} etiqueta="Período"/>
         <div className="campo-filtro" title="«En curso» (por defecto) mide solo las cuentas que siguen abiertas; «Cerradas» solo las ya cerradas (estado 19); «Ambas» une los dos universos. Cambia el universo de cuentas de toda la página.">
           <Desplegable valor={alcanceCuentas} opciones={opcionesAlcanceCuentas} onChange={setAlcanceCuentas} className="pilla-filtro-campo"/>
+        </div>
+        <div className="campo-filtro" title="Las OPS son los contratos cuya tercera sigla del número es PSA o PSP (STD-CD-PSA, STD-CD-PSP). «Solo OPS» muestra únicamente esas; «Sin OPS» las excluye.">
+          <Desplegable valor={ops} opciones={OPCIONES_OPS} onChange={setOps} className="pilla-filtro-campo"/>
         </div>
         <span className="texto-apoyo">Estos filtros aplican a todos los indicadores, gráficas y tablas de esta página.</span>
       </div>
@@ -440,6 +446,10 @@ export function AnaliticaPage() {
       {puede('CONTRATOS_COMPARAR_SECRETARIAS') ? (<ComparativaSecretarias
           filas={comparativaQuery.data ?? []}
           misSecretarias={secretariasSesion}
+          contratos={contratosFiltrados}
+          alcance={alcanceCuentas}
+          filtros={filtrosCuentas}
+          hoy={hoy}
           cargando={comparativaQuery.isLoading}
           error={comparativaQuery.isError}
           onReintentar={() => comparativaQuery.refetch()}

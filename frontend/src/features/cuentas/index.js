@@ -6,6 +6,7 @@ export { FlujoCuentaLineaTiempo } from './components/FlujoCuentaLineaTiempo';
 export * from './utils/estados';
 export * from './utils/dependencias';
 export * from './utils/bloques';
+export * from './utils/ops';
 export * from './utils/alcanceCuentas';
 export * from './utils/avanceCuenta';
 export * from './utils/cuentasSecretaria';

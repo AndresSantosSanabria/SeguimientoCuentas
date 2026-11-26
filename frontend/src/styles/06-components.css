@@ -531,6 +531,11 @@
   color: var(--slate-400);
 }
 
+/* La glosa va pegada a su fila; el aire que separa una fila de otra lo marca la lista. */
+.tooltip-dato-bloque .tooltip-pista {
+  margin-block-start: 0.125rem;
+}
+
 /* ---- dona de supervisión ---- */
 .donut {
   display: flex;
@@ -1888,5 +1893,248 @@
   padding: 0.75rem 0.625rem;
   font-size: var(--size-xs);
   line-height: var(--size-xs-lh);
+  color: var(--slate-500);
+}
+
+/* ── Tiempo real: descarga de carga laboral ─────────────────────────────── */
+.tiempo-real-acciones {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+.carga-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.carga-filtros {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem 1rem;
+  align-items: end;
+}
+
+.carga-campo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.carga-busqueda {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 0.625rem;
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-xl);
+  background-color: #fff;
+}
+
+.carga-busqueda svg {
+  width: 1rem;
+  height: 1rem;
+  color: var(--slate-500);
+  flex: none;
+}
+
+.carga-busqueda input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  padding: 0.5rem 0;
+  font-size: var(--size-sm);
+  color: var(--slate-900);
+}
+
+.carga-busqueda input:focus {
+  outline: none;
+}
+
+.carga-check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: var(--size-sm);
+  color: var(--slate-700);
+  cursor: pointer;
+  padding-bottom: 0.5rem;
+}
+
+.carga-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+}
+
+.carga-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-xl);
+  background-color: var(--slate-50);
+}
+
+.carga-kpi-valor {
+  font-size: var(--size-lg);
+  font-weight: 700;
+  color: var(--brand-700);
+}
+
+.carga-kpi-label {
+  font-size: var(--size-xs);
+  color: var(--slate-500);
+}
+
+.carga-tabla {
+  overflow: auto;
+  max-height: 360px;
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-xl);
+}
+
+.carga-nota {
+  padding: 0.5rem 0.75rem;
+}
+
+.carga-vacio {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--slate-500);
+  font-size: var(--size-sm);
+}
+
+.carga-vacio svg {
+  width: 2rem;
+  height: 2rem;
+  color: var(--slate-300);
+}
+
+/* ── Tiempo real: buscador que lleva al bloque del contrato ─────────────── */
+.buscador-bloque {
+  position: relative;
+  flex: 1 1 260px;
+  max-width: 360px;
+}
+
+.buscador-bloque-campo {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 0.625rem;
+  border: 1px solid var(--slate-200);
+  border-radius: 9999px;
+  background-color: #fff;
+}
+
+.buscador-bloque-campo .input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  padding: 0.5rem 0;
+  box-shadow: none;
+}
+
+.buscador-bloque-campo .input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+.buscador-bloque-limpiar {
+  display: inline-flex;
+  border: none;
+  background: transparent;
+  color: var(--slate-500);
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: 9999px;
+}
+
+.buscador-bloque-limpiar:hover {
+  color: var(--slate-700);
+  background-color: var(--slate-50);
+}
+
+.buscador-bloque-lista {
+  position: absolute;
+  top: calc(100% + 0.375rem);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  max-height: 320px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0.25rem;
+  list-style: none;
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-xl);
+  background-color: #fff;
+  box-shadow: var(--shadow-2xl-tinted);
+}
+
+.buscador-bloque-opcion {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.5rem 0.625rem;
+  border: none;
+  border-radius: var(--radius-lg);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: var(--transicion);
+}
+
+.buscador-bloque-opcion:hover {
+  background-color: var(--slate-50);
+}
+
+.buscador-bloque-opcion-texto {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.buscador-bloque-contrato {
+  font-size: var(--size-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--slate-900);
+}
+
+.buscador-bloque-contratista {
+  font-size: var(--size-xs);
+  color: var(--slate-500);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.buscador-bloque-marca {
+  flex: none;
+  font-size: var(--size-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--brand-700);
+  background-color: var(--slate-50);
+  border: 1px solid var(--slate-200);
+  border-radius: 9999px;
+  padding: 0.125rem 0.5rem;
+}
+
+.buscador-bloque-vacio {
+  padding: 0.75rem 0.625rem;
+  font-size: var(--size-xs);
   color: var(--slate-500);
 }

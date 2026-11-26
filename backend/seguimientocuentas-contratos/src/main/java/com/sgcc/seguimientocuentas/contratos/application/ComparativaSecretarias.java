@@ -44,7 +44,7 @@ public class ComparativaSecretarias {
      */
     public static ComparativaSecretarias construir(List<ContratoResumenDTO> contratos,
                                                     List<Integer> anios, LocalDate desde, LocalDate hasta,
-                                                    String alcance, LocalDate hoy) {
+                                                    String alcance, String ops, LocalDate hoy) {
         Map<String, Acumulado> porSecretaria = new LinkedHashMap<>();
         // El rango de fechas recorta la cuota, no el contrato: un extremo vacio se abre al
         // principio del historico o a hoy, igual que en la pagina de analitica.
@@ -58,6 +58,9 @@ public class ComparativaSecretarias {
                 : corteSinRango(anios, hoy);
 
         for (ContratoResumenDTO contrato : contratos) {
+            if (!esDelTipo(contrato, ops)) {
+                continue;
+            }
             if (!enPeriodo(contrato, anios, desde, hasta)) {
                 continue;
             }
@@ -308,6 +311,21 @@ public class ComparativaSecretarias {
         } catch (RuntimeException e) {
             return null;
         }
+    }
+
+    /**
+     * El contrato pasa el filtro de tipo. Las OPS son las cuyo numero tiene PSA o PSP como
+     * tercera sigla (STD-CD-PSA, STD-CD-PSP). «ops» deja solo esas; «no-ops» las excluye;
+     * cualquier otro valor (o vacio) mide todos.
+     */
+    static boolean esDelTipo(ContratoResumenDTO contrato, String ops) {
+        if (ops == null || ops.isBlank() || "todas".equalsIgnoreCase(ops)) {
+            return true;
+        }
+        String[] siglas = String.valueOf(contrato.getNoContrato()).split("-");
+        boolean esOps = siglas.length > 2
+                && ("PSA".equalsIgnoreCase(siglas[2].trim()) || "PSP".equalsIgnoreCase(siglas[2].trim()));
+        return "ops".equalsIgnoreCase(ops) ? esOps : !esOps;
     }
 
     /** La dependencia registrada; si falta, el prefijo del numero de contrato. */

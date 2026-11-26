@@ -1,5 +1,6 @@
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { AXIS_TICK } from '@/features/analitica/components/charts/ChartTooltip';
+import { estiloTooltipDentroDeGrafica } from '@/features/analitica/components/charts/estiloTooltipDentroDeGrafica';
 import { formatNumber, truncate } from '@/shared/utils';
 
 function SupervisorTooltip({ active, payload }) {
@@ -63,7 +64,11 @@ export function SupervisorBars({ data, height = 320, onSupervisorSelect }) {
           width={190}
           tickFormatter={(value) => truncate(value, 28)}
         />
-        <Tooltip cursor={{ fill: '#eef3f7' }} content={<SupervisorTooltip />} />
+        <Tooltip
+          cursor={{ fill: '#eef3f7' }}
+          content={<SupervisorTooltip />}
+          wrapperStyle={estiloTooltipDentroDeGrafica({ anchoEje: 190, margenIzquierda: 4, margenDerecha: 24 })}
+        />
         <Bar
           dataKey="value"
           name="Contratos"

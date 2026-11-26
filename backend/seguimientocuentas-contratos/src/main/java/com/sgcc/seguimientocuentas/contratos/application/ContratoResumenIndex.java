@@ -140,12 +140,12 @@ public class ContratoResumenIndex {
      * quien pregunta, y solo se devuelven totales por secretaria.
      */
     public ComparativaSecretarias comparativaSecretarias(List<Integer> anios, LocalDate desde,
-                                                          LocalDate hasta, String alcance) {
+                                                          LocalDate hasta, String alcance, String ops) {
         List<ContratoResumenDTO> todos = new ArrayList<>(fichas.size());
         for (FichaContrato ficha : fichas.values()) {
             todos.add(ficha.dto());
         }
-        return ComparativaSecretarias.construir(todos, anios, desde, hasta, alcance, LocalDate.now());
+        return ComparativaSecretarias.construir(todos, anios, desde, hasta, alcance, ops, LocalDate.now());
     }
 
     /** Todas las secretarias que aparecen en el indice, para poder compararlas entre si. */

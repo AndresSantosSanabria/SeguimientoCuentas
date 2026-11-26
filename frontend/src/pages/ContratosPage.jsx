@@ -14,7 +14,7 @@ import { useAuth } from '@/features/sesion/components/AuthProvider';
 import { useContratos } from '@/features/contratos';
 import { ALCANCES_CUENTAS, contratosEnAlcance } from '@/features/cuentas';
 import { ALERTA_OPTIONS, AVANCE_OPTIONS, INFORME_OPTIONS, ORDEN_OPTIONS, SUPERVISION_OPTIONS, compareContratos, isAlertaFiltro, isAvanceFiltro, isInformeFiltro, isOrdenFiltro, isSupervisionFiltro, matchesAlerta, matchesAvance, matchesInforme, matchesSupervision, } from '@/features/contratos';
-import { aniosDisponibles, contratoEnAnios } from '@/features/cuentas';
+import { aniosDisponibles, contratoEnAnios, contratoEnOps, OPCIONES_OPS } from '@/features/cuentas';
 import { downloadCsv } from '@/shared/utils';
 import { estadoLabel } from '@/features/cuentas';
 import { formatDate, formatNumber, normalizar, truncate } from '@/shared/utils';
@@ -46,6 +46,7 @@ export function ContratosPage() {
     const alertaParam = searchParams.get('alerta');
     const supervisionParam = searchParams.get('supervision');
     const informeParam = searchParams.get('informe');
+    const opsParam = searchParams.get('ops');
     const ordenParam = searchParams.get('orden');
     const aniosParam = searchParams.get('anios');
     const alcanceParam = searchParams.get('alcance');
@@ -55,6 +56,7 @@ export function ContratosPage() {
     const alerta = isAlertaFiltro(alertaParam) ? alertaParam : 'all';
     const supervision = isSupervisionFiltro(supervisionParam) ? supervisionParam : 'all';
     const informe = isInformeFiltro(informeParam) ? informeParam : 'all';
+    const ops = OPCIONES_OPS.some((opcion) => opcion.value === opsParam) ? opsParam : 'todas';
     const orden = isOrdenFiltro(ordenParam) ? ordenParam : 'fecha-desc';
     // Años y alcance de cuentas: el mismo universo que mide la analítica, para que
     // los KPI y el listado cuenten exactamente los mismos contratos.
@@ -163,6 +165,8 @@ export function ContratosPage() {
                 return false;
             if (!matchesInforme(contrato, informe))
                 return false;
+            if (!contratoEnOps(contrato, ops))
+                return false;
             if (supervisorParam !== 'all') {
                 const nombre = contrato.supervisor?.trim() ?? '';
                 if (supervisorParam === SIN_SUPERVISOR) {
@@ -176,11 +180,11 @@ export function ContratosPage() {
             return true;
         })
             .sort((a, b) => compareContratos(a, b, orden));
-    }, [base, qParam, estadoParam, avance, alerta, supervision, informe, supervisorParam, orden]);
+    }, [base, qParam, estadoParam, avance, alerta, supervision, informe, ops, supervisorParam, orden]);
     const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
     const page = Math.min(Math.max(1, Number.isFinite(pageParam) ? pageParam : 1), totalPages);
     const rows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-    const hasFilters = Boolean(qParam) || estadoParam !== 'all' || avance !== 'all' || alerta !== 'all' || supervision !== 'all' || informe !== 'all' || supervisorParam !== 'all' || anios.length > 0 || alcance !== 'todas' || orden !== 'fecha-desc';
+    const hasFilters = Boolean(qParam) || estadoParam !== 'all' || avance !== 'all' || alerta !== 'all' || supervision !== 'all' || informe !== 'all' || ops !== 'todas' || supervisorParam !== 'all' || anios.length > 0 || alcance !== 'todas' || orden !== 'fecha-desc';
     const clearFilters = () => {
         setSearchParams({}, { replace: true });
     };
@@ -242,6 +246,8 @@ export function ContratosPage() {
           <PillaFiltro etiqueta="Alertas" valor={alerta} opciones={ALERTA_OPTIONS} onChange={(valor) => updateParam('alerta', valor)} activa={alerta !== 'all'}/>
 
           <PillaFiltro etiqueta="Supervisión" valor={supervision} opciones={SUPERVISION_OPTIONS} onChange={(valor) => updateParam('supervision', valor)} activa={supervision !== 'all'}/>
+
+          <PillaFiltro etiqueta="Tipo" valor={ops} opciones={OPCIONES_OPS} onChange={(valor) => updateParam('ops', valor)} activa={ops !== 'todas'}/>
 
           <button type="button" className={`pilla-boton${avanzadosAbiertos ? ' pilla-boton-activa' : ''}`} onClick={() => setAvanzadosAbiertos((previo) => !previo)} aria-expanded={avanzadosAbiertos}>
             <SlidersHorizontal/>
